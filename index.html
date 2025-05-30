@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSRF Test Client</title>
+</head>
+<body>
+  <h1>CSRF Test Client</h1>
+
+  <section id="login-section">
+    <h2>Login</h2>
+    <form id="login-form">
+      <label>
+        Username:<br />
+        <input type="text" name="username" value="admin" />
+      </label><br />
+      <label>
+        Password:<br />
+        <input type="password" name="password" value="letmein" />
+      </label><br />
+      <button type="submit">Login</button>
+    </form>
+    <p id="login-status"></p>
+  </section>
+
+  <hr />
+
+  <section id="changepw-section" style="display:none;">
+    <h2>Change Password</h2>
+    <form id="changepw-form">
+      <label>
+        Current Password:<br />
+        <input type="password" name="currentPassword" value="letmein" />
+      </label><br />
+      <label>
+        New Password:<br />
+        <input type="password" name="newPassword" value="newpass" />
+      </label><br />
+      <button type="submit">Change Password</button>
+    </form>
+    <p id="changepw-status"></p>
+  </section>
+
+  <script>
+    const loginForm = document.getElementById('login-form');
+    const changepwForm = document.getElementById('changepw-form');
+    const loginStatus = document.getElementById('login-status');
+    const changepwStatus = document.getElementById('changepw-status');
+    const changepwSection = document.getElementById('changepw-section');
+
+    async function getCsrfToken() {
+      const resp = await fetch('http://localhost:8080/csrf-token', {
+        credentials: 'include',
+        headers: { 'Referer': window.location.origin }
+      });
+      const token = resp.headers.get('X-CSRF-Token');
+      return token;
+    }
+
+    loginForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const formData = new FormData(loginForm);
+      const body = JSON.stringify({
+        username: formData.get('username'),
+        password: formData.get('password')
+      });
+      const resp = await fetch('http://localhost:8080/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'Referer': window.location.origin },
+        body
+      });
+      if (resp.ok) {
+        loginStatus.textContent = 'Login successful';
+        changepwSection.style.display = 'block';
+      } else {
+        loginStatus.textContent = 'Login failed: ' + resp.status;
+      }
+    });
+
+    changepwForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const csrfToken = await getCsrfToken();
+      const formData = new FormData(changepwForm);
+      const body = JSON.stringify({
+        currentPassword: formData.get('currentPassword'),
+        newPassword: formData.get('newPassword')
+      });
+      const resp = await fetch('/changepw', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+          'Referer': window.location.origin
+        },
+        body
+      });
+      if (resp.ok) {
+        changepwStatus.textContent = 'Password changed successfully';
+      } else {
+        changepwStatus.textContent = 'Change failed: ' + resp.status;
+      }
+    });
+  </script>
+</body>
+</html>
