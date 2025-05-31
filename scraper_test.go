@@ -358,3 +358,35 @@ func Test_updateSkinsPlayers(t *testing.T) {
 	assert.Equal(t, skinHoleResults[0].Won, "")
 	assert.Equal(t, skinHoleResults[0].Tie, "Robert Judson, Jim Tokanel, John Theriault...")
 }
+
+func Test_updateMatchPlayResults(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	err = applyMigrations(db)
+	assert.NoError(t, err)
+
+	path := filepath.Join("testdata", "match-play-bracket.html")
+	htmlContent, err := os.ReadFile(path)
+	assert.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(htmlContent)
+	}))
+	defer server.Close()
+
+	err = updateMatchPlayResults(db, "2025", server.URL)
+	assert.NoError(t, err)
+
+	var matchPlayMatches []*MatchPlayMatch
+	err = db.Find(&matchPlayMatches).Error
+	assert.NoError(t, err)
+
+	assert.Len(t, matchPlayMatches, 16)
+	assert.Equal(t, matchPlayMatches[0].Year, "2025")
+	assert.Equal(t, matchPlayMatches[0].Round, "Round 1")
+	assert.Equal(t, matchPlayMatches[0].Player1, "Ricky Dichard")
+	assert.Equal(t, matchPlayMatches[0].Player2, "Bye")
+	assert.Equal(t, matchPlayMatches[0].Winner, "Ricky Dichard")
+	assert.Equal(t, matchPlayMatches[0].MatchNum, 1)
+}

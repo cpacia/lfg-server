@@ -77,18 +77,18 @@ func main() {
 	r.Get("/results/teams/{eventID}", s.GetTeamResults)
 	r.Get("/results/wgr/{eventID}", s.GetWgrResults)
 
-	r.Post("/disabled-golfers", s.PostDisabledGolfer)
-	r.Put("/disabled-golfers/{name}", s.PutDisabledGolfer)
 	r.Get("/disabled-golfers/{name}", s.GetDisabledGolfer)
-	r.Delete("/disabled-golfers/{name}", s.DeleteDisabledGolfer)
+	r.Post("/disabled-golfers", authMiddleware(s.PostDisabledGolfer))
+	r.Put("/disabled-golfers/{name}", authMiddleware(s.PutDisabledGolfer))
+	r.Delete("/disabled-golfers/{name}", authMiddleware(s.DeleteDisabledGolfer))
 
-	r.Post("/colony-cup", s.PostColonyCupInfo)
 	r.Get("/colony-cup/{year}", s.GetColonyCupInfo)
-	r.Put("/colony-cup/{year}", s.PutColonyCupInfo)
-	r.Delete("/colony-cup/{year}", s.DeleteColonyCupInfo)
+	r.Post("/colony-cup", authMiddleware(s.PostColonyCupInfo))
+	r.Put("/colony-cup/{year}", authMiddleware(s.PutColonyCupInfo))
+	r.Delete("/colony-cup/{year}", authMiddleware(s.DeleteColonyCupInfo))
 
 	r.Get("/match-play", s.GetMatchPlayInfo)
-	r.Put("/match-play", s.PutMatchPlayInfo)
+	r.Put("/match-play", authMiddleware(s.PutMatchPlayInfo))
 
 	http.ListenAndServe(":8080", r)
 }
@@ -162,6 +162,7 @@ func applyMigrations(db *gorm.DB) error {
 		&SeasonRank{},
 		&WGRRank{},
 		&MatchPlayInfo{},
+		&MatchPlayMatch{},
 		&ColonyCupInfo{},
 		&DisabledGolfer{},
 		&NetResult{},

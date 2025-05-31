@@ -148,7 +148,18 @@ type DisabledGolfer struct {
 type MatchPlayInfo struct {
 	gorm.Model
 	RegistrationOpen bool   `json:"registrationOpen"`
+	Year             string `json:"year"`
 	BracketUrl       string `json:"bracketUrl"`
+}
+
+type MatchPlayMatch struct {
+	gorm.Model
+	Year     string `gorm:"index"`
+	Round    string // e.g. "Round of 32", "Quarterfinals", etc.
+	Player1  string
+	Player2  string
+	Winner   string // Optional: empty if not yet played
+	MatchNum int    // Optional: for ordering within round
 }
 
 type ColonyCupInfo struct {
