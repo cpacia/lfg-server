@@ -125,6 +125,24 @@ func (s *Server) POSTStandingsUrls(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) POSTRefreshStandings(w http.ResponseWriter, r *http.Request) {
+	var latest Standings
+	err := s.db.Order("calendar_year DESC").First(&latest).Error
+	if err != nil && !!errors.Is(err, gorm.ErrRecordNotFound) {
+		http.Error(w, "Error loading standings from db", http.StatusInternalServerError)
+		return
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		http.Error(w, "Standings not saved yet", http.StatusBadRequest)
+		return
+	}
+
+	if err := updateStandings(&latest, s.db); err != nil {
+		http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func updateStandings(s *Standings, db *gorm.DB) error {
 	err := updateStandingsGeneric(db, s.SeasonStandingsUrl, s.CalendarYear, func(year, player, rank, events, points string) *SeasonRank {
 		return &SeasonRank{

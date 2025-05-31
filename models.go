@@ -23,7 +23,7 @@ type Claims struct {
 
 type DBCredentials struct {
 	gorm.Model
-	Username     string
+	Username     string `gorm:"unique"`
 	PasswordHash string
 }
 
@@ -48,7 +48,7 @@ type Event struct {
 
 type Standings struct {
 	gorm.Model
-	CalendarYear       string `json:"calendarYear"`
+	CalendarYear       string `json:"calendarYear" gorm:"unique"`
 	SeasonStandingsUrl string `json:"seasonStandingsUrl"`
 	WgrStandingsUrl    string `json:"wgrStandingsUrl"`
 }
@@ -73,7 +73,7 @@ type MatchPlayInfo struct {
 
 type ColonyCupInfo struct {
 	gorm.Model
-	Year        string         `json:"year"`
+	Year        string         `json:"year" gorm:"unique"`
 	WinningTeam datatypes.JSON `gorm:"type:json"`
 }
 

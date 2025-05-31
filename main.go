@@ -58,7 +58,9 @@ func main() {
 	}
 
 	r.Post("/login", s.POSTLoginHandler)
-	r.Post("/changepw", authMiddleware(s.POSTChangePasswordHandler))
+	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
+	r.Post("/standings", authMiddleware(s.POSTStandingsUrls))
+	r.Post("/refresh-standings", authMiddleware(s.POSTRefreshStandings))
 
 	http.ListenAndServe(":8080", r)
 }
