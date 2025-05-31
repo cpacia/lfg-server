@@ -8,7 +8,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -226,10 +229,23 @@ func (s *Server) POSTRefreshStandings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
-	var event Event
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "Invalid multipart form", http.StatusBadRequest)
 		return
+	}
+
+	event, err := parseEventFromMultipart(r)
+	if err != nil {
+		http.Error(w, "Bad event JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Save thumbnail
+	if filename, err := s.saveThumbnail(r, event.EventID); err != nil {
+		http.Error(w, "Failed to save thumbnail", http.StatusInternalServerError)
+		return
+	} else if filename != "" {
+		event.Thumbnail = filename
 	}
 
 	result := s.db.Create(&event)
@@ -271,20 +287,30 @@ func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
 
-	// Load existing
 	var existing Event
 	if err := s.db.First(&existing, "event_id = ?", eventID).Error; err != nil {
 		http.Error(w, "Event not found", http.StatusNotFound)
 		return
 	}
 
-	// Decode full object
-	var updated Event
-	if err := json.NewDecoder(r.Body).Decode(&updated); err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "Invalid multipart form", http.StatusBadRequest)
 		return
 	}
-	updated.EventID = existing.EventID // ensure ID is preserved
+
+	updated, err := parseEventFromMultipart(r)
+	if err != nil {
+		http.Error(w, "Bad event JSON", http.StatusBadRequest)
+		return
+	}
+	updated.EventID = existing.EventID
+
+	if filename, err := s.saveThumbnail(r, updated.EventID); err != nil {
+		http.Error(w, "Failed to save thumbnail", http.StatusInternalServerError)
+		return
+	} else if filename != "" {
+		updated.Thumbnail = filename
+	}
 
 	// Compare fields
 	triggerScrape := updated.NetLeaderboardUrl != existing.NetLeaderboardUrl ||
@@ -337,6 +363,42 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func parseEventFromMultipart(r *http.Request) (*Event, error) {
+	jsonPart := r.FormValue("event")
+	var event Event
+	if err := json.Unmarshal([]byte(jsonPart), &event); err != nil {
+		return nil, err
+	}
+	return &event, nil
+}
+
+func (s *Server) saveThumbnail(r *http.Request, eventID string) (string, error) {
+	file, header, err := r.FormFile("thumbnail")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			return "", nil // No image uploaded
+		}
+		return "", err
+	}
+	defer file.Close()
+
+	ext := filepath.Ext(header.Filename)
+	filename := fmt.Sprintf("%s%s", eventID, ext)
+	path := filepath.Join(s.imageDir, filename)
+
+	dst, err := os.Create(path)
+	if err != nil {
+		return "", err
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		return "", err
+	}
+
+	return filename, nil
+}
+
 func (s *Server) DELETEEvent(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
 	if eventID == "" {
@@ -370,12 +432,22 @@ func (s *Server) DELETEEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Delete thumbnail if it exists
+	if event.Thumbnail != "" {
+		path := filepath.Join(s.imageDir, event.Thumbnail)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			http.Error(w, fmt.Sprintf("Failed to delete thumbnail: %s", err.Error()), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Delete the event record
 	if err := s.db.Delete(&event).Error; err != nil {
 		http.Error(w, "Failed to delete event", http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent) // 204 No Content
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) GETEvent(w http.ResponseWriter, r *http.Request) {
@@ -397,6 +469,53 @@ func (s *Server) GETEvent(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(event)
+}
+
+func (s *Server) GETEventThumbnail(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "eventID")
+	if eventID == "" {
+		http.Error(w, "Missing event ID", http.StatusBadRequest)
+		return
+	}
+
+	var event Event
+	if err := s.db.First(&event, "event_id = ?", eventID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Event not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if event.Thumbnail == "" {
+		http.Error(w, "Thumbnail not set", http.StatusNotFound)
+		return
+	}
+
+	path := filepath.Join(s.imageDir, event.Thumbnail)
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "Thumbnail file not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Error reading thumbnail", http.StatusInternalServerError)
+		}
+		return
+	}
+	defer file.Close()
+
+	// Detect content type
+	buf := make([]byte, 512)
+	n, _ := file.Read(buf)
+	contentType := http.DetectContentType(buf[:n])
+
+	// Reset reader to beginning
+	file.Seek(0, io.SeekStart)
+
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, file)
 }
 
 func (s *Server) GETEvents(w http.ResponseWriter, r *http.Request) {

@@ -19,6 +19,7 @@ import (
 
 const (
 	dataDir        = ".lfgserver"
+	imageDirName   = "images"
 	dbName         = "lfg.db"
 	jwtKeyHex      = "e2e9b8cde02cf305bd521ff4ec987d1bb5a8627743f93db1efe15a228b4daaaa"
 	userContextKey = contextKey("user")
@@ -27,8 +28,9 @@ const (
 type contextKey string
 
 type Server struct {
-	db *gorm.DB
-	r  chi.Router
+	db       *gorm.DB
+	r        chi.Router
+	imageDir string
 }
 
 var jwtKey []byte
@@ -42,7 +44,7 @@ func init() {
 }
 
 func main() {
-	db, err := initDatabase()
+	db, dataDir, err := initDatabase()
 	if err != nil {
 		log.Fatalf("Database initialization errored: %s", err)
 	}
@@ -53,8 +55,9 @@ func main() {
 	r.Use(middleware.Logger)
 
 	s := &Server{
-		db: db,
-		r:  r,
+		db:       db,
+		r:        r,
+		imageDir: path.Join(dataDir, imageDirName),
 	}
 
 	r.Post("/login", s.POSTLoginHandler)
@@ -66,6 +69,7 @@ func main() {
 
 	r.Get("/events", s.GETEvents)
 	r.Get("/events/{eventID}", s.GETEvent)
+	r.Get("/events/{eventID}/thumbnail", s.GETEventThumbnail)
 	r.Post("/events", authMiddleware(s.POSTEvent))
 	r.Put("/events/{eventID}", authMiddleware(s.PUTEvent))
 	r.Delete("/events/{eventID}", authMiddleware(s.DELETEEvent))
@@ -97,7 +101,7 @@ func main() {
 
 // Check to see if the database exists. If not create it and initialize
 // it with a default admin password to be changed later.
-func initDatabase() (*gorm.DB, error) {
+func initDatabase() (*gorm.DB, string, error) {
 	// Get the OS specific home directory via the Go standard lib.
 	var homeDir string
 	usr, err := user.Current()
@@ -114,19 +118,19 @@ func initDatabase() (*gorm.DB, error) {
 
 	dataDirPath := path.Join(homeDir, dataDir)
 
-	err = os.MkdirAll(dataDirPath, os.ModePerm)
+	err = os.MkdirAll(path.Join(dataDirPath, imageDirName), os.ModePerm)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	db, err := gorm.Open(sqlite.Open(path.Join(dataDirPath, dbName)), &gorm.Config{})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Migrate the schema
 	if err := applyMigrations(db); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var creds DBCredentials
@@ -135,25 +139,25 @@ func initDatabase() (*gorm.DB, error) {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			hash, err := bcrypt.GenerateFromPassword([]byte("letmein"), bcrypt.DefaultCost)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			result := db.Create(&DBCredentials{Username: "admin", PasswordHash: string(hash)})
 			if result.Error != nil {
-				return nil, err
+				return nil, "", err
 			}
 
 			result = db.Create(&MatchPlayInfo{
 				RegistrationOpen: false,
 			})
 			if result.Error != nil {
-				return nil, err
+				return nil, "", err
 			}
 		} else {
-			return nil, result.Error
+			return nil, "", result.Error
 		}
 	}
 
-	return db, nil
+	return db, dataDirPath, nil
 }
 
 func applyMigrations(db *gorm.DB) error {
