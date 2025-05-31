@@ -95,22 +95,7 @@ func initDatabase() (*gorm.DB, error) {
 	}
 
 	// Migrate the schema
-	err = db.AutoMigrate(
-		&DBCredentials{},
-		&Event{},
-		&Standings{},
-		&SeasonRank{},
-		&WGRRank{},
-		&MatchPlayInfo{},
-		&ColonyCupInfo{},
-		&DisabledGolfer{},
-		&NetResult{},
-		&GrossResult{},
-		&SkinsPlayerResult{},
-		&SkinsHolesResult{},
-		&TeamResult{},
-		&WGRResult{})
-	if err != nil {
+	if err := applyMigrations(db); err != nil {
 		return nil, err
 	}
 
@@ -132,6 +117,24 @@ func initDatabase() (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func applyMigrations(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&DBCredentials{},
+		&Event{},
+		&Standings{},
+		&SeasonRank{},
+		&WGRRank{},
+		&MatchPlayInfo{},
+		&ColonyCupInfo{},
+		&DisabledGolfer{},
+		&NetResult{},
+		&GrossResult{},
+		&SkinsPlayerResult{},
+		&SkinsHolesResult{},
+		&TeamResult{},
+		&WGRResult{})
 }
 
 // Validate the JWT token. It can either been in a cookie or a header.
