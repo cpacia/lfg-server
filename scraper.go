@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func updateStandings(s *Standings, db *gorm.DB) error {
+func updateStandings(db *gorm.DB, s *Standings) error {
 	err := updateStandingsGeneric(db, s.SeasonStandingsUrl, s.CalendarYear, func(year, player, rank, events, points string) *SeasonRank {
 		return &SeasonRank{
 			Year:   year,
@@ -29,6 +29,81 @@ func updateStandings(s *Standings, db *gorm.DB) error {
 			Points: points,
 		}
 	})
+}
+
+func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl string) error {
+	if netUrl != "" {
+		err := updateResultsGeneric(db, netUrl, eventID, func(eventID, rank, player, total, strokes, points, scorecardUrl string) *NetResult {
+			return &NetResult{
+				EventID:      eventID,
+				Rank:         rank,
+				Player:       player,
+				Total:        total,
+				Strokes:      strokes,
+				Points:       points,
+				ScorecardUrl: scorecardUrl,
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if grossUrl != "" {
+		err := updateResultsGeneric(db, grossUrl, eventID, func(eventID, rank, player, total, strokes, points, scorecardUrl string) *GrossResult {
+			return &GrossResult{
+				EventID:      eventID,
+				Rank:         rank,
+				Player:       player,
+				Total:        total,
+				Strokes:      strokes,
+				ScorecardUrl: scorecardUrl,
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if skinsUrl != "" {
+		err := updateSkinsResults(db, skinsUrl, eventID)
+		if err != nil {
+			return err
+		}
+	}
+	if teamsUrl != "" {
+		err := updateResultsGeneric(db, teamsUrl, eventID, func(eventID, rank, team, total, strokes, points, scorecardUrl string) *TeamResult {
+			if strokes == "" {
+				strokes = total
+				total = ""
+			}
+			return &TeamResult{
+				EventID: eventID,
+				Rank:    rank,
+				Team:    team,
+				Total:   total,
+				Strokes: strokes,
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if wgrUrl != "" {
+		err := updateResultsGeneric(db, wgrUrl, eventID, func(eventID, rank, player, total, strokes, points, scorecardUrl string) *WGRResult {
+			return &WGRResult{
+				EventID:      eventID,
+				Rank:         rank,
+				Player:       player,
+				Total:        total,
+				Strokes:      strokes,
+				Points:       points,
+				ScorecardUrl: scorecardUrl,
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func updateStandingsGeneric[T any](db *gorm.DB, url string, year string, newRow func(string, string, string, string, string) T) error {
@@ -97,7 +172,7 @@ func updateResultsGeneric[T any](db *gorm.DB, url string, eventID string, newRow
 
 		base := strings.TrimSuffix(url, "leaderboard.htm")
 		scorecardURL := fmt.Sprintf("%scontestant/%s/scorecard.htm", base, playerID)
-		
+
 		parts := strings.SplitN(points, ".", 2)
 		integerPoints := parts[0]
 		rows = append(rows, newRow(eventID, rank, player, total, strokes, integerPoints, scorecardURL))

@@ -116,7 +116,7 @@ func (s *Server) POSTStandingsUrls(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not save standings", http.StatusInternalServerError)
 		return
 	}
-	if err := updateStandings(dbStandings, s.db); err != nil {
+	if err := updateStandings(s.db, dbStandings); err != nil {
 		http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
 		return
 	}
@@ -134,7 +134,7 @@ func (s *Server) POSTRefreshStandings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := updateStandings(&latest, s.db); err != nil {
+	if err := updateStandings(s.db, &latest); err != nil {
 		http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
 		return
 	}

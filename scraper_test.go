@@ -27,11 +27,11 @@ func Test_updateStandings(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err = updateStandings(&Standings{
+	err = updateStandings(db, &Standings{
 		CalendarYear:       "2025",
 		SeasonStandingsUrl: server.URL,
 		WgrStandingsUrl:    server.URL,
-	}, db)
+	})
 	assert.NoError(t, err)
 
 	var seasonRankings []*SeasonRank
