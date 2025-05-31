@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"strings"
+	"time"
 )
 
 type Credentials struct {
@@ -29,21 +32,103 @@ type DBCredentials struct {
 
 type Event struct {
 	gorm.Model
-	Date                datatypes.Date
-	Name                string `json:"name" gorm:"index"`
-	Course              string `json:"course"`
-	Town                string `json:"town"`
-	State               string `json:"state"`
-	HandicapAllowance   string `json:"handicapAllowance"`
-	BlueGolfUrl         string `json:"blueGolfUrl"`
-	Thumbnail           string `json:"thumbnail"`
-	RegistrationOpen    bool   `json:"registrationOpen"`
-	IsComplete          bool   `json:"isComplete"`
-	NetLeaderboardUrl   string `json:"netLeaderboardUrl"`
-	GrossLeaderboardUrl string `json:"grossLeaderboardUrl"`
-	SkinsLeaderboardUrl string `json:"skinsLeaderboardUrl"`
-	TeamsLeaderboardUrl string `json:"teamsLeaderboardUrl"`
-	WgrLeaderboardUrl   string `json:"wgrLeaderboardUrl"`
+	EventID             string         `json:"eventID" gorm:"uniqueIndex"`
+	Date                datatypes.Date `json:"date"`
+	Name                string         `json:"name"`
+	Course              string         `json:"course"`
+	Town                string         `json:"town"`
+	State               string         `json:"state"`
+	HandicapAllowance   string         `json:"handicapAllowance"`
+	BlueGolfUrl         string         `json:"blueGolfUrl"`
+	Thumbnail           string         `json:"thumbnail"`
+	RegistrationOpen    bool           `json:"registrationOpen"`
+	IsComplete          bool           `json:"isComplete"`
+	NetLeaderboardUrl   string         `json:"netLeaderboardUrl"`
+	GrossLeaderboardUrl string         `json:"grossLeaderboardUrl"`
+	SkinsLeaderboardUrl string         `json:"skinsLeaderboardUrl"`
+	TeamsLeaderboardUrl string         `json:"teamsLeaderboardUrl"`
+	WgrLeaderboardUrl   string         `json:"wgrLeaderboardUrl"`
+}
+
+func (e *Event) BeforeCreate(tx *gorm.DB) (err error) {
+	// Extract year
+	t := time.Time(e.Date)
+	year := t.Year()
+
+	// Sanitize the name to avoid spaces or weird characters in the ID
+	nameSlug := strings.ReplaceAll(strings.ToLower(e.Name), " ", "-")
+
+	// Set the ID
+	e.EventID = fmt.Sprintf("%d-%s", year, nameSlug)
+	return
+}
+
+func (e *Event) ResultsUpdated() bool {
+	return e.NetLeaderboardUrl != "" ||
+		e.GrossLeaderboardUrl != "" ||
+		e.SkinsLeaderboardUrl != "" ||
+		e.TeamsLeaderboardUrl != "" ||
+		e.WgrLeaderboardUrl != ""
+}
+
+type NetResult struct {
+	gorm.Model
+	EventID      string `json:"eventID" gorm:"index"`
+	Rank         string `json:"rank"`
+	Player       string `json:"player"`
+	Total        string `json:"total"`
+	Strokes      string `json:"strokes"`
+	Points       string `json:"points"`
+	ScorecardUrl string `json:"scorecardUrl"`
+}
+
+type GrossResult struct {
+	gorm.Model
+	EventID      string `json:"eventID" gorm:"index"`
+	Rank         string `json:"rank"`
+	Player       string `json:"player"`
+	Total        string `json:"total"`
+	Strokes      string `json:"strokes"`
+	ScorecardUrl string `json:"scorecardUrl"`
+}
+
+type SkinsPlayerResult struct {
+	gorm.Model
+	EventID      string `gorm:"index"`
+	Rank         string `json:"rank"`
+	Player       string `json:"player"`
+	Skins        string `json:"skins"`
+	ScorecardUrl string `json:"scorecardUrl"`
+}
+
+type SkinsHolesResult struct {
+	gorm.Model
+	EventID string `gorm:"index"`
+	Hole    string `json:"hole"`
+	Par     string `json:"par"`
+	Score   string `json:"score"`
+	Won     string `json:"won"`
+	Tie     string `json:"tie"`
+}
+
+type TeamResult struct {
+	gorm.Model
+	EventID string `gorm:"index"`
+	Rank    string `json:"rank"`
+	Team    string `json:"team"`
+	Total   string `json:"total"`
+	Strokes string `json:"strokes"`
+}
+
+type WGRResult struct {
+	gorm.Model
+	EventID      string `json:"eventID" gorm:"index"`
+	Rank         string `json:"rank"`
+	Player       string `json:"player"`
+	Total        string `json:"total"`
+	Strokes      string `json:"strokes"`
+	Points       string `json:"points"`
+	ScorecardUrl string `json:"scorecardUrl"`
 }
 
 type Standings struct {
@@ -60,11 +145,6 @@ type DisabledGolfer struct {
 	Duration string `json:"duration"`
 }
 
-type CalendarYear struct {
-	gorm.Model
-	CurrentYear string `json:"currentYear"`
-}
-
 type MatchPlayInfo struct {
 	gorm.Model
 	RegistrationOpen bool   `json:"registrationOpen"`
@@ -73,7 +153,7 @@ type MatchPlayInfo struct {
 
 type ColonyCupInfo struct {
 	gorm.Model
-	Year        string         `json:"year" gorm:"unique"`
+	Year        string         `json:"year"`
 	WinningTeam datatypes.JSON `gorm:"type:json"`
 }
 

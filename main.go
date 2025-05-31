@@ -101,10 +101,15 @@ func initDatabase() (*gorm.DB, error) {
 		&Standings{},
 		&SeasonRank{},
 		&WGRRank{},
-		&CalendarYear{},
 		&MatchPlayInfo{},
 		&ColonyCupInfo{},
-		&DisabledGolfer{})
+		&DisabledGolfer{},
+		&NetResult{},
+		&GrossResult{},
+		&SkinsPlayerResult{},
+		&SkinsHolesResult{},
+		&TeamResult{},
+		&WGRResult{})
 	if err != nil {
 		return nil, err
 	}
