@@ -87,6 +87,9 @@ func main() {
 	r.Put("/colony-cup/{year}", s.PutColonyCupInfo)
 	r.Delete("/colony-cup/{year}", s.DeleteColonyCupInfo)
 
+	r.Get("/match-play", s.GetMatchPlayInfo)
+	r.Put("/match-play", s.PutMatchPlayInfo)
+
 	http.ListenAndServe(":8080", r)
 }
 
@@ -133,6 +136,13 @@ func initDatabase() (*gorm.DB, error) {
 				return nil, err
 			}
 			result := db.Create(&DBCredentials{Username: "admin", PasswordHash: string(hash)})
+			if result.Error != nil {
+				return nil, err
+			}
+
+			result = db.Create(&MatchPlayInfo{
+				RegistrationOpen: false,
+			})
 			if result.Error != nil {
 				return nil, err
 			}

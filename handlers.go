@@ -656,3 +656,44 @@ func (s *Server) DeleteColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (s *Server) GetMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
+	var info MatchPlayInfo
+	if err := s.db.First(&info, 1).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "MatchPlayInfo not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
+}
+
+func (s *Server) PutMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
+	var input MatchPlayInfo
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	var existing MatchPlayInfo
+	if err := s.db.First(&existing, 1).Error; err != nil {
+		http.Error(w, "MatchPlayInfo not found", http.StatusNotFound)
+		return
+	}
+
+	// Update fields
+	existing.RegistrationOpen = input.RegistrationOpen
+	existing.BracketUrl = input.BracketUrl
+
+	if err := s.db.Save(&existing).Error; err != nil {
+		http.Error(w, "Failed to update record", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(existing)
+}
