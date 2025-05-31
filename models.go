@@ -32,7 +32,7 @@ type DBCredentials struct {
 
 type Event struct {
 	gorm.Model
-	EventID             string         `json:"eventID" gorm:"uniqueIndex"`
+	EventID             string         `json:"eventID" gorm:"primaryKey"`
 	Date                datatypes.Date `json:"date"`
 	Name                string         `json:"name"`
 	Course              string         `json:"course"`
@@ -94,7 +94,7 @@ type GrossResult struct {
 
 type SkinsPlayerResult struct {
 	gorm.Model
-	EventID      string `gorm:"index"`
+	EventID      string `json:"eventID" gorm:"index"`
 	Rank         string `json:"rank"`
 	Player       string `json:"player"`
 	Skins        string `json:"skins"`
@@ -103,7 +103,7 @@ type SkinsPlayerResult struct {
 
 type SkinsHolesResult struct {
 	gorm.Model
-	EventID string `gorm:"index"`
+	EventID string `json:"eventID" gorm:"index"`
 	Hole    string `json:"hole"`
 	Par     string `json:"par"`
 	Score   string `json:"score"`
@@ -113,7 +113,7 @@ type SkinsHolesResult struct {
 
 type TeamResult struct {
 	gorm.Model
-	EventID string `gorm:"index"`
+	EventID string `json:"eventID" gorm:"index"`
 	Rank    string `json:"rank"`
 	Team    string `json:"team"`
 	Total   string `json:"total"`
