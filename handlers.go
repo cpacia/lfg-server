@@ -99,10 +99,10 @@ func (s *Server) POSTChangePasswordHandler(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) GetStandings(w http.ResponseWriter, r *http.Request) {
-	var years []string
+func (s *Server) GETStandings(w http.ResponseWriter, r *http.Request) {
+	requestedYear := r.URL.Query().Get("year")
 
-	// Get all distinct years from SeasonRank
+	var years []string
 	if err := s.db.Model(&SeasonRank{}).
 		Distinct().
 		Pluck("year", &years).Error; err != nil {
@@ -122,117 +122,54 @@ func (s *Server) GetStandings(w http.ResponseWriter, r *http.Request) {
 
 	// Sort descending
 	sort.Sort(sort.Reverse(sort.StringSlice(years)))
-	latestYear := years[0]
-	additionalYears := years[1:]
 
-	// Load standings for latest year
+	// Choose year: requested or latest
+	targetYear := years[0]
+	if requestedYear != "" {
+		found := false
+		for _, y := range years {
+			if y == requestedYear {
+				targetYear = requestedYear
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "Year not found", http.StatusNotFound)
+			return
+		}
+	}
+
+	// Build additional years list
+	additionalYears := make([]string, 0, len(years)-1)
+	for _, y := range years {
+		if y != targetYear {
+			additionalYears = append(additionalYears, y)
+		}
+	}
+
+	// Load standings
 	var season []SeasonRank
-	if err := s.db.Where("year = ?", latestYear).
-		Find(&season).Error; err != nil {
+	if err := s.db.Where("year = ?", targetYear).Find(&season).Error; err != nil {
 		http.Error(w, "Failed to load season standings", http.StatusInternalServerError)
 		return
 	}
-
 	sort.Slice(season, func(i, j int) bool {
 		return parseRank(season[i].Rank) < parseRank(season[j].Rank)
 	})
 
 	var wgr []WGRRank
-	if err := s.db.Where("year = ?", latestYear).
-		Find(&wgr).Error; err != nil {
+	if err := s.db.Where("year = ?", targetYear).Find(&wgr).Error; err != nil {
 		http.Error(w, "Failed to load WGR standings", http.StatusInternalServerError)
 		return
 	}
-
 	sort.Slice(wgr, func(i, j int) bool {
 		return parseRank(wgr[i].Rank) < parseRank(wgr[j].Rank)
 	})
 
 	// Respond
 	resp := map[string]any{
-		"calendarYear":    latestYear,
-		"additionalYears": additionalYears,
-		"season":          season,
-		"wgr":             wgr,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
-func (s *Server) GetStandingsByYear(w http.ResponseWriter, r *http.Request) {
-	requestedYear := chi.URLParam(r, "year")
-	if requestedYear == "" {
-		http.Error(w, "Missing year", http.StatusBadRequest)
-		return
-	}
-
-	var years []string
-	if err := s.db.Model(&SeasonRank{}).
-		Distinct().
-		Pluck("year", &years).Error; err != nil {
-		http.Error(w, "Failed to fetch years", http.StatusInternalServerError)
-		return
-	}
-
-	if len(years) == 0 {
-		json.NewEncoder(w).Encode(map[string]any{
-			"calendarYear":    nil,
-			"additionalYears": []string{},
-			"season":          []SeasonRank{},
-			"wgr":             []WGRRank{},
-		})
-		return
-	}
-
-	// Sort descending
-	sort.Sort(sort.Reverse(sort.StringSlice(years)))
-
-	// Ensure the requested year exists
-	found := false
-	for _, y := range years {
-		if y == requestedYear {
-			found = true
-			break
-		}
-	}
-	if !found {
-		http.Error(w, "Year not found", http.StatusNotFound)
-		return
-	}
-
-	// Prepare additionalYears list
-	additionalYears := []string{}
-	for _, y := range years {
-		if y != requestedYear {
-			additionalYears = append(additionalYears, y)
-		}
-	}
-
-	// Fetch standings
-	var season []SeasonRank
-	if err := s.db.Where("year = ?", requestedYear).
-		Find(&season).Error; err != nil {
-		http.Error(w, "Failed to load season standings", http.StatusInternalServerError)
-		return
-	}
-	sort.Slice(season, func(i, j int) bool {
-		return parseRank(season[i].Rank) < parseRank(season[j].Rank)
-	})
-
-	var wgr []WGRRank
-	if err := s.db.Where("year = ?", requestedYear).
-		Find(&wgr).Error; err != nil {
-		http.Error(w, "Failed to load WGR standings", http.StatusInternalServerError)
-		return
-	}
-	sort.Slice(wgr, func(i, j int) bool {
-		return parseRank(wgr[i].Rank) < parseRank(wgr[j].Rank)
-	})
-
-	// Return result
-	resp := map[string]any{
-		"calendarYear":    requestedYear,
+		"calendarYear":    targetYear,
 		"additionalYears": additionalYears,
 		"season":          season,
 		"wgr":             wgr,
@@ -463,6 +400,8 @@ func (s *Server) GETEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GETEvents(w http.ResponseWriter, r *http.Request) {
+	requestedYear := r.URL.Query().Get("year")
+
 	var events []Event
 	if err := s.db.Order("date DESC").Find(&events).Error; err != nil {
 		http.Error(w, "Error fetching events", http.StatusInternalServerError)
@@ -481,55 +420,51 @@ func (s *Server) GETEvents(w http.ResponseWriter, r *http.Request) {
 
 	// Group events by year
 	eventMap := make(map[int][]Event)
-	years := make(map[int]bool)
+	yearSet := make(map[int]bool)
 	for _, e := range events {
 		year := time.Time(e.Date).Year()
 		eventMap[year] = append(eventMap[year], e)
-		years[year] = true
+		yearSet[year] = true
 	}
 
-	// Determine latest year
+	// Sort years descending
 	var allYears []int
-	for y := range years {
+	for y := range yearSet {
 		allYears = append(allYears, y)
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(allYears)))
 
-	latestYear := allYears[0]
-	additionalYears := allYears[1:]
+	// Determine target year
+	targetYear := allYears[0] // default to most recent
+	if requestedYear != "" {
+		if y, err := strconv.Atoi(requestedYear); err == nil && yearSet[y] {
+			targetYear = y
+		} else {
+			http.Error(w, "Requested year not found", http.StatusNotFound)
+			return
+		}
+	}
 
+	// Prepare additional years
+	additionalYears := make([]int, 0, len(allYears)-1)
+	for _, y := range allYears {
+		if y != targetYear {
+			additionalYears = append(additionalYears, y)
+		}
+	}
+
+	// Return response
 	resp := map[string]any{
-		"calendarYear":    latestYear,
+		"calendarYear":    targetYear,
 		"additionalYears": additionalYears,
-		"events":          eventMap[latestYear],
+		"events":          eventMap[targetYear],
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (s *Server) GETEventsByYear(w http.ResponseWriter, r *http.Request) {
-	yearStr := chi.URLParam(r, "year")
-	year, err := strconv.Atoi(yearStr)
-	if err != nil || year < 1900 || year > 2100 {
-		http.Error(w, "Invalid year", http.StatusBadRequest)
-		return
-	}
-
-	var events []Event
-	if err := s.db.
-		Where("strftime('%Y', date) = ?", fmt.Sprintf("%d", year)).
-		Order("date ASC").
-		Find(&events).Error; err != nil {
-		http.Error(w, "Error fetching events", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(events)
-}
-
-func (s *Server) GetNetResults(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETNetResults(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
 	if eventID == "" {
 		http.Error(w, "Missing event ID", http.StatusBadRequest)
@@ -566,7 +501,7 @@ func (s *Server) GetNetResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (s *Server) GetGrossResults(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETGrossResults(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
 	if eventID == "" {
 		http.Error(w, "Missing event ID", http.StatusBadRequest)
@@ -585,7 +520,7 @@ func (s *Server) GetGrossResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
-func (s *Server) GetSkinsResults(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETSkinsResults(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
 	if eventID == "" {
 		http.Error(w, "Missing event ID", http.StatusBadRequest)
@@ -614,7 +549,7 @@ func (s *Server) GetSkinsResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (s *Server) GetTeamResults(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETTeamResults(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
 	if eventID == "" {
 		http.Error(w, "Missing event ID", http.StatusBadRequest)
@@ -633,7 +568,7 @@ func (s *Server) GetTeamResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
-func (s *Server) GetWgrResults(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETWgrResults(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
 	if eventID == "" {
 		http.Error(w, "Missing event ID", http.StatusBadRequest)
@@ -652,7 +587,7 @@ func (s *Server) GetWgrResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
-func (s *Server) GetCurrentYear(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETCurrentYear(w http.ResponseWriter, r *http.Request) {
 	var latest Event
 	err := s.db.Order("date DESC").Limit(1).First(&latest).Error
 	if err != nil {
@@ -681,7 +616,7 @@ func parseRank(r string) int {
 	return n
 }
 
-func (s *Server) PostDisabledGolfer(w http.ResponseWriter, r *http.Request) {
+func (s *Server) POSTDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 	var golfer DisabledGolfer
 	if err := json.NewDecoder(r.Body).Decode(&golfer); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -697,7 +632,7 @@ func (s *Server) PostDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(golfer)
 }
 
-func (s *Server) PutDisabledGolfer(w http.ResponseWriter, r *http.Request) {
+func (s *Server) PUTDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if name == "" {
 		http.Error(w, "Missing name", http.StatusBadRequest)
@@ -725,7 +660,7 @@ func (s *Server) PutDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(updated)
 }
 
-func (s *Server) GetDisabledGolfer(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if name == "" {
 		http.Error(w, "Missing name", http.StatusBadRequest)
@@ -745,7 +680,7 @@ func (s *Server) GetDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(golfer)
 }
 
-func (s *Server) DeleteDisabledGolfer(w http.ResponseWriter, r *http.Request) {
+func (s *Server) DELETEDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if name == "" {
 		http.Error(w, "Missing name", http.StatusBadRequest)
@@ -760,7 +695,7 @@ func (s *Server) DeleteDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) PostColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) POSTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	var info ColonyCupInfo
 	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -776,7 +711,7 @@ func (s *Server) PostColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(info)
 }
 
-func (s *Server) GetColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	year := chi.URLParam(r, "year")
 	if year == "" {
 		http.Error(w, "Missing year", http.StatusBadRequest)
@@ -797,7 +732,7 @@ func (s *Server) GetColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(info)
 }
 
-func (s *Server) PutColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) PUTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	year := chi.URLParam(r, "year")
 	if year == "" {
 		http.Error(w, "Missing year", http.StatusBadRequest)
@@ -825,7 +760,7 @@ func (s *Server) PutColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(updated)
 }
 
-func (s *Server) DeleteColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) DELETEColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	year := chi.URLParam(r, "year")
 	if year == "" {
 		http.Error(w, "Missing year", http.StatusBadRequest)
@@ -840,7 +775,7 @@ func (s *Server) DeleteColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) GetMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GETMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 	var info MatchPlayInfo
 	if err := s.db.First(&info, 1).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -855,7 +790,7 @@ func (s *Server) GetMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(info)
 }
 
-func (s *Server) PutMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) PUTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 	var input MatchPlayInfo
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -879,4 +814,68 @@ func (s *Server) PutMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(existing)
+}
+
+func (s *Server) GETMatchPlayResults(w http.ResponseWriter, r *http.Request) {
+	requestedYear := r.URL.Query().Get("year")
+
+	var years []string
+	if err := s.db.Model(&MatchPlayMatch{}).Distinct().Pluck("year", &years).Error; err != nil {
+		http.Error(w, "Failed to fetch match play years", http.StatusInternalServerError)
+		return
+	}
+	if len(years) == 0 {
+		json.NewEncoder(w).Encode(map[string]any{
+			"calendarYear":    nil,
+			"additionalYears": []string{},
+			"results":         []MatchPlayMatch{},
+		})
+		return
+	}
+
+	// Sort years descending
+	sort.Sort(sort.Reverse(sort.StringSlice(years)))
+
+	// Decide target year
+	targetYear := years[0] // default to most recent
+	if requestedYear != "" {
+		found := false
+		for _, y := range years {
+			if y == requestedYear {
+				targetYear = requestedYear
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "Requested year not found", http.StatusNotFound)
+			return
+		}
+	}
+
+	// Compute additional years
+	additionalYears := make([]string, 0, len(years)-1)
+	for _, y := range years {
+		if y != targetYear {
+			additionalYears = append(additionalYears, y)
+		}
+	}
+
+	// Fetch match data
+	var matches []MatchPlayMatch
+	if err := s.db.Where("year = ?", targetYear).
+		Order("round, match_num").
+		Find(&matches).Error; err != nil {
+		http.Error(w, "Failed to fetch match play results", http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]any{
+		"calendarYear":    targetYear,
+		"additionalYears": additionalYears,
+		"results":         matches,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
