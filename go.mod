@@ -3,10 +3,12 @@ module github.com/cpacia/lfg-server
 go 1.24.3
 
 require (
+	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/gocolly/colly v1.2.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/stretchr/testify v1.10.0
+	github.com/ulule/limiter/v3 v3.11.2
 	golang.org/x/crypto v0.38.0
 	gorm.io/datatypes v1.2.5
 	gorm.io/driver/sqlite v1.5.7
@@ -15,7 +17,6 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/PuerkitoBio/goquery v1.10.3 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/antchfx/htmlquery v1.3.4 // indirect
 	github.com/antchfx/xmlquery v1.4.4 // indirect
@@ -30,13 +31,14 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/kennygrant/sanitize v1.2.4 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/protobuf v1.26.0 // indirect
+	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
 )

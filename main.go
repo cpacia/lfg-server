@@ -7,6 +7,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/ulule/limiter/v3"
+	mhttp "github.com/ulule/limiter/v3/drivers/middleware/stdlib"
+	memstore "github.com/ulule/limiter/v3/drivers/store/memory"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -33,7 +36,10 @@ type Server struct {
 	imageDir string
 }
 
-var jwtKey []byte
+var (
+	jwtKey    []byte
+	rateLimit = "4-H"
+)
 
 func init() {
 	var err error
@@ -51,6 +57,15 @@ func main() {
 
 	r := chi.NewRouter()
 
+	store := memstore.NewStore()
+	rate, err := limiter.NewRateFromFormatted(rateLimit)
+	if err != nil {
+		log.Fatal("error parsing jwt key")
+	}
+
+	lim := limiter.New(store, rate, limiter.WithTrustForwardHeader(true))
+	rateLimitMiddleware := mhttp.NewMiddleware(lim)
+
 	// Middleware
 	r.Use(middleware.Logger)
 
@@ -60,7 +75,9 @@ func main() {
 		imageDir: path.Join(dataDir, imageDirName),
 	}
 
-	r.Post("/login", s.POSTLoginHandler)
+	r.Post("/login", func(w http.ResponseWriter, r *http.Request) {
+		rateLimitMiddleware.Handler(http.HandlerFunc(s.POSTLoginHandler)).ServeHTTP(w, r)
+	})
 	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
 
 	r.Get("/standings", s.GETStandings)
