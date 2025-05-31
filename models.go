@@ -140,7 +140,7 @@ type Standings struct {
 
 type DisabledGolfer struct {
 	gorm.Model
-	Name     string `json:"name"`
+	Name     string `json:"name" gorm:"uniqueIndex"`
 	Reason   string `json:"reason"`
 	Duration string `json:"duration"`
 }
@@ -153,7 +153,7 @@ type MatchPlayInfo struct {
 
 type ColonyCupInfo struct {
 	gorm.Model
-	Year        string         `json:"year"`
+	Year        string         `json:"year" gorm:"uniqueIndex"`
 	WinningTeam datatypes.JSON `gorm:"type:json"`
 }
 

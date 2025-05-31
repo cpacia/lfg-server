@@ -59,19 +59,33 @@ func main() {
 
 	r.Post("/login", s.POSTLoginHandler)
 	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
+
 	r.Post("/standings", authMiddleware(s.POSTStandingsUrls))
 	r.Post("/refresh-standings", authMiddleware(s.POSTRefreshStandings))
-	r.Put("/events", authMiddleware(s.POSTEvent))
+
+	r.Get("/events", s.GETEvents)
+	r.Get("/events/{eventID}", s.GETEvent)
+	r.Get("/events/year/{year}", s.GETEventsByYear)
+	r.Get("/events/year/current", s.GetCurrentYear)
+	r.Post("/events", authMiddleware(s.POSTEvent))
 	r.Put("/events/{eventID}", authMiddleware(s.PUTEvent))
 	r.Delete("/events/{eventID}", authMiddleware(s.DELETEEvent))
-	r.Get("/events/{eventID}", s.GETEvent)
-	r.Get("/events", s.GETEvents)
-	r.Get("/events/year/{year}", s.GETEventsByYear)
+
 	r.Get("/results/net/{eventID}", s.GetNetResults)
 	r.Get("/results/gross/{eventID}", s.GetGrossResults)
 	r.Get("/results/skins/{eventID}", s.GetSkinsResults)
 	r.Get("/results/teams/{eventID}", s.GetTeamResults)
 	r.Get("/results/wgr/{eventID}", s.GetWgrResults)
+
+	r.Post("/disabled-golfers", s.PostDisabledGolfer)
+	r.Put("/disabled-golfers/{name}", s.PutDisabledGolfer)
+	r.Get("/disabled-golfers/{name}", s.GetDisabledGolfer)
+	r.Delete("/disabled-golfers/{name}", s.DeleteDisabledGolfer)
+
+	r.Post("/colony-cup", s.PostColonyCupInfo)
+	r.Get("/colony-cup/{year}", s.GetColonyCupInfo)
+	r.Put("/colony-cup/{year}", s.PutColonyCupInfo)
+	r.Delete("/colony-cup/{year}", s.DeleteColonyCupInfo)
 
 	http.ListenAndServe(":8080", r)
 }

@@ -171,7 +171,9 @@ func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated) // for POST
+	json.NewEncoder(w).Encode(event)
 }
 
 func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
@@ -226,6 +228,8 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updated) // for PUT
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -465,6 +469,26 @@ func (s *Server) GetWgrResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
+func (s *Server) GetCurrentYear(w http.ResponseWriter, r *http.Request) {
+	var latest Event
+	err := s.db.Order("date DESC").Limit(1).First(&latest).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "No events found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	year := time.Time(latest.Date).Year()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{
+		"calendarYear": year,
+	})
+}
+
 func parseRank(r string) int {
 	r = strings.TrimPrefix(r, "T")
 	n, err := strconv.Atoi(r)
@@ -472,4 +496,163 @@ func parseRank(r string) int {
 		return 9999 // fallback to bottom if unparsable
 	}
 	return n
+}
+
+func (s *Server) PostDisabledGolfer(w http.ResponseWriter, r *http.Request) {
+	var golfer DisabledGolfer
+	if err := json.NewDecoder(r.Body).Decode(&golfer); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.db.Create(&golfer).Error; err != nil {
+		http.Error(w, fmt.Sprintf("Error saving golfer: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(golfer)
+}
+
+func (s *Server) PutDisabledGolfer(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		http.Error(w, "Missing name", http.StatusBadRequest)
+		return
+	}
+
+	var updated DisabledGolfer
+	if err := json.NewDecoder(r.Body).Decode(&updated); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	updated.Name = name
+
+	var existing DisabledGolfer
+	if err := s.db.First(&existing, "name = ?", name).Error; err != nil {
+		http.Error(w, "Golfer not found", http.StatusNotFound)
+		return
+	}
+
+	if err := s.db.Save(&updated).Error; err != nil {
+		http.Error(w, "Error updating golfer", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(updated)
+}
+
+func (s *Server) GetDisabledGolfer(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		http.Error(w, "Missing name", http.StatusBadRequest)
+		return
+	}
+
+	var golfer DisabledGolfer
+	if err := s.db.First(&golfer, "name = ?", name).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Golfer not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	json.NewEncoder(w).Encode(golfer)
+}
+
+func (s *Server) DeleteDisabledGolfer(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		http.Error(w, "Missing name", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.db.Delete(&DisabledGolfer{}, "name = ?", name).Error; err != nil {
+		http.Error(w, "Error deleting golfer", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) PostColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+	var info ColonyCupInfo
+	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.db.Create(&info).Error; err != nil {
+		http.Error(w, fmt.Sprintf("Error creating entry: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(info)
+}
+
+func (s *Server) GetColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+	year := chi.URLParam(r, "year")
+	if year == "" {
+		http.Error(w, "Missing year", http.StatusBadRequest)
+		return
+	}
+
+	var info ColonyCupInfo
+	if err := s.db.First(&info, "year = ?", year).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Record not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
+}
+
+func (s *Server) PutColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+	year := chi.URLParam(r, "year")
+	if year == "" {
+		http.Error(w, "Missing year", http.StatusBadRequest)
+		return
+	}
+
+	var updated ColonyCupInfo
+	if err := json.NewDecoder(r.Body).Decode(&updated); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	updated.Year = year
+
+	var existing ColonyCupInfo
+	if err := s.db.First(&existing, "year = ?", year).Error; err != nil {
+		http.Error(w, "Record not found", http.StatusNotFound)
+		return
+	}
+
+	if err := s.db.Save(&updated).Error; err != nil {
+		http.Error(w, "Error updating record", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(updated)
+}
+
+func (s *Server) DeleteColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+	year := chi.URLParam(r, "year")
+	if year == "" {
+		http.Error(w, "Missing year", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.db.Delete(&ColonyCupInfo{}, "year = ?", year).Error; err != nil {
+		http.Error(w, "Error deleting record", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
