@@ -48,6 +48,7 @@ type Event struct {
 
 type Standings struct {
 	gorm.Model
+	CalendarYear       string `json:"calendarYear"`
 	SeasonStandingsUrl string `json:"seasonStandingsUrl"`
 	WgrStandingsUrl    string `json:"wgrStandingsUrl"`
 }
@@ -74,4 +75,22 @@ type ColonyCupInfo struct {
 	gorm.Model
 	Year        string         `json:"year"`
 	WinningTeam datatypes.JSON `gorm:"type:json"`
+}
+
+type SeasonRank struct {
+	gorm.Model
+	Year   string `json:"year"`
+	Player string `json:"player"`
+	Rank   string `json:"rank"`
+	Events string `json:"events"`
+	Points string `json:"points"`
+}
+
+type WGRRank struct {
+	gorm.Model
+	Year   string `json:"year"`
+	Player string `json:"player"`
+	Rank   string `json:"rank"`
+	Events string `json:"events"`
+	Points string `json:"points"`
 }

@@ -44,7 +44,7 @@ func init() {
 func main() {
 	db, err := initDatabase()
 	if err != nil {
-		log.Fatalf("Database initialization errored: %w", err)
+		log.Fatalf("Database initialization errored: %s", err)
 	}
 
 	r := chi.NewRouter()
@@ -93,7 +93,16 @@ func initDatabase() (*gorm.DB, error) {
 	}
 
 	// Migrate the schema
-	err = db.AutoMigrate(&DBCredentials{})
+	err = db.AutoMigrate(
+		&DBCredentials{},
+		&Event{},
+		&Standings{},
+		&SeasonRank{},
+		&WGRRank{},
+		&CalendarYear{},
+		&MatchPlayInfo{},
+		&ColonyCupInfo{},
+		&DisabledGolfer{})
 	if err != nil {
 		return nil, err
 	}
