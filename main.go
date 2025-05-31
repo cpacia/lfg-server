@@ -60,6 +60,8 @@ func main() {
 	r.Post("/login", s.POSTLoginHandler)
 	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
 
+	r.Get("/standings", s.GetStandings)
+	r.Get("/standings/year/{year}", s.GetStandingsByYear)
 	r.Post("/standings", authMiddleware(s.POSTStandingsUrls))
 	r.Post("/refresh-standings", authMiddleware(s.POSTRefreshStandings))
 

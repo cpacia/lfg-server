@@ -99,6 +99,149 @@ func (s *Server) POSTChangePasswordHandler(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) GetStandings(w http.ResponseWriter, r *http.Request) {
+	var years []string
+
+	// Get all distinct years from SeasonRank
+	if err := s.db.Model(&SeasonRank{}).
+		Distinct().
+		Pluck("year", &years).Error; err != nil {
+		http.Error(w, "Failed to fetch years", http.StatusInternalServerError)
+		return
+	}
+
+	if len(years) == 0 {
+		json.NewEncoder(w).Encode(map[string]any{
+			"calendarYear":    nil,
+			"additionalYears": []string{},
+			"season":          []SeasonRank{},
+			"wgr":             []WGRRank{},
+		})
+		return
+	}
+
+	// Sort descending
+	sort.Sort(sort.Reverse(sort.StringSlice(years)))
+	latestYear := years[0]
+	additionalYears := years[1:]
+
+	// Load standings for latest year
+	var season []SeasonRank
+	if err := s.db.Where("year = ?", latestYear).
+		Find(&season).Error; err != nil {
+		http.Error(w, "Failed to load season standings", http.StatusInternalServerError)
+		return
+	}
+
+	sort.Slice(season, func(i, j int) bool {
+		return parseRank(season[i].Rank) < parseRank(season[j].Rank)
+	})
+
+	var wgr []WGRRank
+	if err := s.db.Where("year = ?", latestYear).
+		Find(&wgr).Error; err != nil {
+		http.Error(w, "Failed to load WGR standings", http.StatusInternalServerError)
+		return
+	}
+
+	sort.Slice(wgr, func(i, j int) bool {
+		return parseRank(wgr[i].Rank) < parseRank(wgr[j].Rank)
+	})
+
+	// Respond
+	resp := map[string]any{
+		"calendarYear":    latestYear,
+		"additionalYears": additionalYears,
+		"season":          season,
+		"wgr":             wgr,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) GetStandingsByYear(w http.ResponseWriter, r *http.Request) {
+	requestedYear := chi.URLParam(r, "year")
+	if requestedYear == "" {
+		http.Error(w, "Missing year", http.StatusBadRequest)
+		return
+	}
+
+	var years []string
+	if err := s.db.Model(&SeasonRank{}).
+		Distinct().
+		Pluck("year", &years).Error; err != nil {
+		http.Error(w, "Failed to fetch years", http.StatusInternalServerError)
+		return
+	}
+
+	if len(years) == 0 {
+		json.NewEncoder(w).Encode(map[string]any{
+			"calendarYear":    nil,
+			"additionalYears": []string{},
+			"season":          []SeasonRank{},
+			"wgr":             []WGRRank{},
+		})
+		return
+	}
+
+	// Sort descending
+	sort.Sort(sort.Reverse(sort.StringSlice(years)))
+
+	// Ensure the requested year exists
+	found := false
+	for _, y := range years {
+		if y == requestedYear {
+			found = true
+			break
+		}
+	}
+	if !found {
+		http.Error(w, "Year not found", http.StatusNotFound)
+		return
+	}
+
+	// Prepare additionalYears list
+	additionalYears := []string{}
+	for _, y := range years {
+		if y != requestedYear {
+			additionalYears = append(additionalYears, y)
+		}
+	}
+
+	// Fetch standings
+	var season []SeasonRank
+	if err := s.db.Where("year = ?", requestedYear).
+		Find(&season).Error; err != nil {
+		http.Error(w, "Failed to load season standings", http.StatusInternalServerError)
+		return
+	}
+	sort.Slice(season, func(i, j int) bool {
+		return parseRank(season[i].Rank) < parseRank(season[j].Rank)
+	})
+
+	var wgr []WGRRank
+	if err := s.db.Where("year = ?", requestedYear).
+		Find(&wgr).Error; err != nil {
+		http.Error(w, "Failed to load WGR standings", http.StatusInternalServerError)
+		return
+	}
+	sort.Slice(wgr, func(i, j int) bool {
+		return parseRank(wgr[i].Rank) < parseRank(wgr[j].Rank)
+	})
+
+	// Return result
+	resp := map[string]any{
+		"calendarYear":    requestedYear,
+		"additionalYears": additionalYears,
+		"season":          season,
+		"wgr":             wgr,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
 func (s *Server) POSTStandingsUrls(w http.ResponseWriter, r *http.Request) {
 	var standings Standings
 	if err := json.NewDecoder(r.Body).Decode(&standings); err != nil {
@@ -169,6 +312,18 @@ func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Error downloading results: %s", err.Error()), http.StatusBadRequest)
 			return
 		}
+
+		var latest Standings
+		err = s.db.Order("calendar_year DESC").First(&latest).Error
+		if err != nil && !!errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Error loading standings from db", http.StatusInternalServerError)
+			return
+		} else if err == nil {
+			if err := updateStandings(s.db, &latest); err != nil {
+				http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -226,6 +381,18 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Error downloading results: %s", err.Error()), http.StatusBadRequest)
 			return
 		}
+
+		var latest Standings
+		err = s.db.Order("calendar_year DESC").First(&latest).Error
+		if err != nil && !!errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Error loading standings from db", http.StatusInternalServerError)
+			return
+		} else if err == nil {
+			if err := updateStandings(s.db, &latest); err != nil {
+				http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -248,6 +415,22 @@ func (s *Server) DELETEEvent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Database error", http.StatusInternalServerError)
 		}
 		return
+	}
+
+	// Delete associated results
+	models := []any{
+		&NetResult{},
+		&GrossResult{},
+		&SkinsPlayerResult{},
+		&SkinsHolesResult{},
+		&TeamResult{},
+		&WGRResult{},
+	}
+	for _, model := range models {
+		if err := s.db.Where("event_id = ?", eventID).Delete(model).Error; err != nil {
+			http.Error(w, "Failed to delete related results", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	if err := s.db.Delete(&event).Error; err != nil {
