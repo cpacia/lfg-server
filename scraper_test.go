@@ -61,6 +61,60 @@ func Test_updateStandings(t *testing.T) {
 	assert.Equal(t, wgrRankings[0].Points, "193")
 }
 
+func Test_updateFullResults(t *testing.T) {
+
+	// 1) Build a map: request‐path → filename on disk
+	files := map[string]string{
+		"/net-results":   "net-results.html",
+		"/gross-results": "gross-results.html",
+		"/skins-results": "skins-results.html",
+		"/team-results":  "team-results.html",
+		"/wgr-results":   "wgr-results.html",
+	}
+
+	// 2) Create a single HTTP handler that looks up r.URL.Path in that map
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Look for an exact match. If not found, return 404.
+		filename, ok := files[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Read the file from testdata/
+		filePath := filepath.Join("testdata", filename)
+		htmlContent, err := os.ReadFile(filePath)
+		if err != nil {
+			// Fail the test if we can’t read the file
+			http.Error(w, "could not read test file", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(htmlContent)
+	})
+
+	// 3) Spin up the httptest.Server
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	err = applyMigrations(db)
+	assert.NoError(t, err)
+
+	err = updateResults(db, "2025-impact-fire-open",
+		server.URL+"/net-results",
+		server.URL+"/gross-results",
+		server.URL+"/skins-results",
+		server.URL+"/team-results",
+		server.URL+"/wgr-results")
+
+	assert.NoError(t, err)
+}
+
 func Test_updateNetResults(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
@@ -273,7 +327,7 @@ func Test_updateSkinsPlayers(t *testing.T) {
 	err = applyMigrations(db)
 	assert.NoError(t, err)
 
-	path := filepath.Join("testdata", "skins-result.html")
+	path := filepath.Join("testdata", "skins-results.html")
 	htmlContent, err := os.ReadFile(path)
 	assert.NoError(t, err)
 
