@@ -7,6 +7,7 @@ All APIs are JSON except `POST` and `PUT` `event` which are multipart/form-data 
 Data models can be found [here](https://github.com/cpacia/lfg-server/blob/main/models.go).
 ```go
 r.Post("/login", s.POSTLoginHandler)
+r.Get("/auth/me", authMiddleware(s.POSTAuthMe))
 r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
 
 r.Get("/standings", s.GETStandings) // Default to current year. ?year= for other years

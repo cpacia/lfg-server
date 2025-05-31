@@ -64,6 +64,27 @@ func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) POSTAuthMe(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(userContextKey).(*Claims)
+	if !ok || claims == nil {
+		http.Error(w, "User info not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	dbCreds := &DBCredentials{}
+	result := s.db.First(dbCreds, "username = ?", claims.Username)
+	if result.Error != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"authenticated": true,
+		"username":      claims.Username,
+	})
+
+}
+
 func (s *Server) POSTChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(userContextKey).(*Claims)
 	if !ok || claims == nil {

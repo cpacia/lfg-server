@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/ulule/limiter/v3"
 	mhttp "github.com/ulule/limiter/v3/drivers/middleware/stdlib"
@@ -69,6 +70,15 @@ func main() {
 	// Middleware
 	r.Use(middleware.Logger)
 
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300, // in seconds
+	}))
+
 	s := &Server{
 		db:       db,
 		r:        r,
@@ -78,6 +88,7 @@ func main() {
 	r.Post("/login", func(w http.ResponseWriter, r *http.Request) {
 		rateLimitMiddleware.Handler(http.HandlerFunc(s.POSTLoginHandler)).ServeHTTP(w, r)
 	})
+	r.Get("/auth/me", authMiddleware(s.POSTAuthMe))
 	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
 
 	r.Get("/standings", s.GETStandings)
