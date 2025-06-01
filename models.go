@@ -32,22 +32,32 @@ type DBCredentials struct {
 
 type Event struct {
 	gorm.Model
-	EventID             string         `json:"eventID" gorm:"primaryKey"`
-	Date                datatypes.Date `json:"date"`
-	Name                string         `json:"name"`
-	Course              string         `json:"course"`
-	Town                string         `json:"town"`
-	State               string         `json:"state"`
-	HandicapAllowance   string         `json:"handicapAllowance"`
-	BlueGolfUrl         string         `json:"blueGolfUrl"`
-	Thumbnail           string         `json:"thumbnail"`
-	RegistrationOpen    bool           `json:"registrationOpen"`
-	IsComplete          bool           `json:"isComplete"`
-	NetLeaderboardUrl   string         `json:"netLeaderboardUrl"`
-	GrossLeaderboardUrl string         `json:"grossLeaderboardUrl"`
-	SkinsLeaderboardUrl string         `json:"skinsLeaderboardUrl"`
-	TeamsLeaderboardUrl string         `json:"teamsLeaderboardUrl"`
-	WgrLeaderboardUrl   string         `json:"wgrLeaderboardUrl"`
+	EventID             string `json:"eventID" gorm:"primaryKey"`
+	Date                datatypes.Date
+	DateString          string `json:"date"`
+	Name                string `json:"name"`
+	Course              string `json:"course"`
+	Town                string `json:"town"`
+	State               string `json:"state"`
+	HandicapAllowance   string `json:"handicapAllowance"`
+	BlueGolfUrl         string `json:"blueGolfUrl"`
+	Thumbnail           string `json:"thumbnail"`
+	RegistrationOpen    bool   `json:"registrationOpen"`
+	IsComplete          bool   `json:"isComplete"`
+	NetLeaderboardUrl   string `json:"netLeaderboardUrl"`
+	GrossLeaderboardUrl string `json:"grossLeaderboardUrl"`
+	SkinsLeaderboardUrl string `json:"skinsLeaderboardUrl"`
+	TeamsLeaderboardUrl string `json:"teamsLeaderboardUrl"`
+	WgrLeaderboardUrl   string `json:"wgrLeaderboardUrl"`
+}
+
+func (e *Event) BeforeSave(tx *gorm.DB) (err error) {
+	parsedDate, err := time.Parse("2006-01-02", e.DateString)
+	if err != nil {
+		return err
+	}
+	e.Date = datatypes.Date(parsedDate)
+	return
 }
 
 func (e *Event) BeforeCreate(tx *gorm.DB) (err error) {

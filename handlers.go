@@ -388,6 +388,7 @@ func parseEventFromMultipart(r *http.Request) (*Event, error) {
 	jsonPart := r.FormValue("event")
 	var event Event
 	if err := json.Unmarshal([]byte(jsonPart), &event); err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	return &event, nil
