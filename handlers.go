@@ -267,7 +267,7 @@ func (s *Server) POSTStandingsUrls(w http.ResponseWriter, r *http.Request) {
 func (s *Server) POSTRefreshStandings(w http.ResponseWriter, r *http.Request) {
 	var latest Standings
 	err := s.db.Order("calendar_year DESC").First(&latest).Error
-	if err != nil && !!errors.Is(err, gorm.ErrRecordNotFound) {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		http.Error(w, "Error loading standings from db", http.StatusInternalServerError)
 		return
 	} else if errors.Is(err, gorm.ErrRecordNotFound) {
