@@ -91,7 +91,9 @@ func main() {
 	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
 
 	r.Get("/standings", s.GETStandings)
-	r.Post("/standings", authMiddleware(s.POSTStandingsUrls))
+	r.Get("/standings-urls", s.GETStandingsUrls)
+	r.Post("/standings-urls", authMiddleware(s.POSTStandingsUrls))
+	r.Put("/standings-urls", authMiddleware(s.PUTStandingsUrls))
 	r.Post("/refresh-standings", authMiddleware(s.POSTRefreshStandings))
 
 	r.Get("/events", s.GETEvents)

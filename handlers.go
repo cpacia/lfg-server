@@ -236,6 +236,17 @@ func (s *Server) GETStandings(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (s *Server) GETStandingsUrls(w http.ResponseWriter, r *http.Request) {
+	var dbStandings []Standings
+	result := s.db.Find(&dbStandings)
+	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dbStandings)
+}
+
 func (s *Server) POSTStandingsUrls(w http.ResponseWriter, r *http.Request) {
 	var standings Standings
 	if err := json.NewDecoder(r.Body).Decode(&standings); err != nil {
@@ -261,7 +272,47 @@ func (s *Server) POSTStandingsUrls(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(dbStandings)
+}
+
+func (s *Server) PUTStandingsUrls(w http.ResponseWriter, r *http.Request) {
+	var standings Standings
+	if err := json.NewDecoder(r.Body).Decode(&standings); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch existing record
+	dbStandings := &Standings{}
+	result := s.db.First(dbStandings, "calendar_year = ?", standings.CalendarYear)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			http.Error(w, "Standings not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Update fields
+	dbStandings.SeasonStandingsUrl = standings.SeasonStandingsUrl
+	dbStandings.WgrStandingsUrl = standings.WgrStandingsUrl
+
+	if err := s.db.Save(dbStandings).Error; err != nil {
+		http.Error(w, "Could not update standings", http.StatusInternalServerError)
+		return
+	}
+
+	if err := updateStandings(s.db, dbStandings); err != nil {
+		http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dbStandings)
 }
 
 func (s *Server) POSTRefreshStandings(w http.ResponseWriter, r *http.Request) {

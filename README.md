@@ -12,7 +12,9 @@ r.Get("/auth/me", authMiddleware(s.POSTAuthMe))
 r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
 
 r.Get("/standings", s.GETStandings) // Default to current year. ?year= for other years
-r.Post("/standings", authMiddleware(s.POSTStandingsUrls))
+r.Get("/standings-urls", s.GETStandingsUrls)
+r.Post("/standings-urls", authMiddleware(s.POSTStandingsUrls))
+r.Put("/standings-urls", authMiddleware(s.PUTStandingsUrls))
 r.Post("/refresh-standings", authMiddleware(s.POSTRefreshStandings))
 
 r.Get("/events", s.GETEvents) // Default to current year. ?year= for other years
