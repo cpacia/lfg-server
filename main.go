@@ -39,7 +39,7 @@ type Server struct {
 
 var (
 	jwtKey    []byte
-	rateLimit = "4-H"
+	rateLimit = "5-H"
 )
 
 func init() {
@@ -85,7 +85,7 @@ func main() {
 		loginRateLimiter: lim,
 	}
 
-	r.Post("/login", s.LoginHandlerWithConditionalRateLimit)
+	r.Post("/login", s.POSTLoginHandler)
 	r.Post("/logout", s.POSTLogoutHandler)
 	r.Get("/auth/me", authMiddleware(s.POSTAuthMe))
 	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))

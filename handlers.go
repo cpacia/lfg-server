@@ -19,8 +19,21 @@ import (
 )
 
 func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
+	// Check if rate limit has been exceeded
+	key := loginRateLimitKey(r)
+	ctx, err := s.loginRateLimiter.Peek(r.Context(), key)
+	if err != nil {
+		http.Error(w, "Rate limiter error", http.StatusInternalServerError)
+		return
+	}
+	if ctx.Reached {
+		http.Error(w, "Too many failed login attempts", http.StatusTooManyRequests)
+		return
+	}
+
 	var creds Credentials
 	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		s.loginRateLimiter.Increment(r.Context(), key, 2)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
@@ -28,11 +41,13 @@ func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 	dbCreds := &DBCredentials{}
 	result := s.db.First(dbCreds, "username = ?", creds.Username)
 	if result.Error != nil {
+		s.loginRateLimiter.Increment(r.Context(), key, 2)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	err := bcrypt.CompareHashAndPassword([]byte(dbCreds.PasswordHash), []byte(creds.Password))
+	err = bcrypt.CompareHashAndPassword([]byte(dbCreds.PasswordHash), []byte(creds.Password))
 	if err != nil {
+		s.loginRateLimiter.Increment(r.Context(), key, 2)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -68,23 +83,6 @@ func loginRateLimitKey(r *http.Request) string {
 	username := r.FormValue("username") // make sure this is parsed beforehand if JSON
 	ip := r.RemoteAddr
 	return fmt.Sprintf("%s:%s", ip, username)
-}
-
-func (s *Server) LoginHandlerWithConditionalRateLimit(w http.ResponseWriter, r *http.Request) {
-	key := loginRateLimitKey(r)
-
-	// Check if rate limit has been exceeded
-	ctx, err := s.loginRateLimiter.Get(r.Context(), key)
-	if err != nil {
-		http.Error(w, "Rate limiter error", http.StatusInternalServerError)
-		return
-	}
-	if ctx.Reached {
-		http.Error(w, "Too many failed login attempts", http.StatusTooManyRequests)
-		return
-	}
-
-	s.POSTLoginHandler(w, r)
 }
 
 func (s *Server) POSTLogoutHandler(w http.ResponseWriter, r *http.Request) {
