@@ -11,27 +11,35 @@ import (
 )
 
 func updateStandings(db *gorm.DB, s *Standings) error {
-	err := updateStandingsGeneric(db, s.SeasonStandingsUrl, s.CalendarYear, func(year, player, rank, events, points string) *SeasonRank {
-		return &SeasonRank{
-			Year:   year,
-			Player: player,
-			Rank:   rank,
-			Events: events,
-			Points: points,
+	if s.SeasonStandingsUrl != "" {
+		err := updateStandingsGeneric(db, s.SeasonStandingsUrl, s.CalendarYear, func(year, player, rank, events, points string) *SeasonRank {
+			return &SeasonRank{
+				Year:   year,
+				Player: player,
+				Rank:   rank,
+				Events: events,
+				Points: points,
+			}
+		})
+		if err != nil {
+			return err
 		}
-	})
-	if err != nil {
-		return err
 	}
-	return updateStandingsGeneric(db, s.WgrStandingsUrl, s.CalendarYear, func(year, player, rank, events, points string) *WGRRank {
-		return &WGRRank{
-			Year:   year,
-			Player: player,
-			Rank:   rank,
-			Events: events,
-			Points: points,
+	if s.WgrStandingsUrl != "" {
+		err := updateStandingsGeneric(db, s.WgrStandingsUrl, s.CalendarYear, func(year, player, rank, events, points string) *WGRRank {
+			return &WGRRank{
+				Year:   year,
+				Player: player,
+				Rank:   rank,
+				Events: events,
+				Points: points,
+			}
+		})
+		if err != nil {
+			return err
 		}
-	})
+	}
+	return nil
 }
 
 func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl string) error {
