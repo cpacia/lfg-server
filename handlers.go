@@ -19,8 +19,14 @@ import (
 )
 
 func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
+	var creds Credentials
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
 	// Check if rate limit has been exceeded
-	key := loginRateLimitKey(r)
+	key := loginRateLimitKey(r, creds.Username)
 	ctx, err := s.loginRateLimiter.Peek(r.Context(), key)
 	if err != nil {
 		http.Error(w, "Rate limiter error", http.StatusInternalServerError)
@@ -28,13 +34,6 @@ func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if ctx.Reached {
 		http.Error(w, "Too many failed login attempts", http.StatusTooManyRequests)
-		return
-	}
-
-	var creds Credentials
-	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-		s.loginRateLimiter.Increment(r.Context(), key, 2)
-		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
@@ -79,8 +78,7 @@ func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func loginRateLimitKey(r *http.Request) string {
-	username := r.FormValue("username") // make sure this is parsed beforehand if JSON
+func loginRateLimitKey(r *http.Request, username string) string {
 	ip := r.RemoteAddr
 	return fmt.Sprintf("%s:%s", ip, username)
 }
