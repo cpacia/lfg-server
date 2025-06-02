@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/ulule/limiter/v3"
-	mhttp "github.com/ulule/limiter/v3/drivers/middleware/stdlib"
 	memstore "github.com/ulule/limiter/v3/drivers/store/memory"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
@@ -32,9 +31,10 @@ const (
 type contextKey string
 
 type Server struct {
-	db       *gorm.DB
-	r        chi.Router
-	imageDir string
+	db               *gorm.DB
+	r                chi.Router
+	imageDir         string
+	loginRateLimiter *limiter.Limiter
 }
 
 var (
@@ -65,7 +65,6 @@ func main() {
 	}
 
 	lim := limiter.New(store, rate, limiter.WithTrustForwardHeader(true))
-	rateLimitMiddleware := mhttp.NewMiddleware(lim)
 
 	// Middleware
 	r.Use(middleware.Logger)
@@ -80,14 +79,13 @@ func main() {
 	}))
 
 	s := &Server{
-		db:       db,
-		r:        r,
-		imageDir: path.Join(dataDir, imageDirName),
+		db:               db,
+		r:                r,
+		imageDir:         path.Join(dataDir, imageDirName),
+		loginRateLimiter: lim,
 	}
 
-	r.Post("/login", func(w http.ResponseWriter, r *http.Request) {
-		rateLimitMiddleware.Handler(http.HandlerFunc(s.POSTLoginHandler)).ServeHTTP(w, r)
-	})
+	r.Post("/login", s.LoginHandlerWithConditionalRateLimit)
 	r.Post("/logout", s.POSTLogoutHandler)
 	r.Get("/auth/me", authMiddleware(s.POSTAuthMe))
 	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
