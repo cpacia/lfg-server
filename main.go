@@ -88,6 +88,7 @@ func main() {
 	r.Post("/login", func(w http.ResponseWriter, r *http.Request) {
 		rateLimitMiddleware.Handler(http.HandlerFunc(s.POSTLoginHandler)).ServeHTTP(w, r)
 	})
+	r.Post("/logout", s.POSTLogoutHandler)
 	r.Get("/auth/me", authMiddleware(s.POSTAuthMe))
 	r.Post("/change-password", authMiddleware(s.POSTChangePasswordHandler))
 

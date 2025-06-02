@@ -64,6 +64,20 @@ func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) POSTLogoutHandler(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false, // Set to true in production if using HTTPS
+		SameSite: http.SameSiteStrictMode,
+		Expires:  time.Unix(0, 0), // Expire immediately
+		MaxAge:   -1,              // Force deletion
+	})
+	w.WriteHeader(http.StatusOK)
+}
+
 func (s *Server) POSTAuthMe(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(userContextKey).(*Claims)
 	if !ok || claims == nil {
