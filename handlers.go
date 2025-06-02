@@ -315,6 +315,37 @@ func (s *Server) PUTStandingsUrls(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(dbStandings)
 }
 
+func (s *Server) DELETEStandingsUrls(w http.ResponseWriter, r *http.Request) {
+	// Decode the incoming JSON to get the calendar year to delete
+	var payload struct {
+		CalendarYear string `json:"calendarYear"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Look up the existing record
+	dbStandings := &Standings{}
+	result := s.db.First(dbStandings, "calendar_year = ?", payload.CalendarYear)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			http.Error(w, "Standings not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Delete the record
+	if err := s.db.Unscoped().Delete(&Standings{}, "calendar_year = ?", payload.CalendarYear).Error; err != nil {
+		http.Error(w, "Could not delete standings", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) POSTRefreshStandings(w http.ResponseWriter, r *http.Request) {
 	var latest Standings
 	err := s.db.Order("calendar_year DESC").First(&latest).Error
@@ -548,7 +579,7 @@ func (s *Server) DELETEEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete the event record
-	if err := s.db.Delete(&event).Error; err != nil {
+	if err := s.db.Unscoped().Delete(&event).Error; err != nil {
 		http.Error(w, "Failed to delete event", http.StatusInternalServerError)
 		return
 	}
@@ -912,7 +943,7 @@ func (s *Server) DELETEDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.db.Delete(&DisabledGolfer{}, "name = ?", name).Error; err != nil {
+	if err := s.db.Unscoped().Delete(&DisabledGolfer{}, "name = ?", name).Error; err != nil {
 		http.Error(w, "Error deleting golfer", http.StatusInternalServerError)
 		return
 	}
@@ -992,7 +1023,7 @@ func (s *Server) DELETEColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.db.Delete(&ColonyCupInfo{}, "year = ?", year).Error; err != nil {
+	if err := s.db.Unscoped().Delete(&ColonyCupInfo{}, "year = ?", year).Error; err != nil {
 		http.Error(w, "Error deleting record", http.StatusInternalServerError)
 		return
 	}
