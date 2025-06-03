@@ -41,6 +41,7 @@ type Event struct {
 	State               string `json:"state"`
 	HandicapAllowance   string `json:"handicapAllowance"`
 	BlueGolfUrl         string `json:"blueGolfUrl"`
+	ShopifyUrl          string `json:"shopifyUrl"`
 	Thumbnail           string `json:"thumbnail"`
 	RegistrationOpen    bool   `json:"registrationOpen"`
 	IsComplete          bool   `json:"isComplete"`
