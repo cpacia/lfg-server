@@ -51,7 +51,7 @@ func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiration := time.Now().Add(15 * time.Minute)
+	expiration := time.Now().Add(60 * time.Minute)
 	claims := &Claims{
 		Username: creds.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
