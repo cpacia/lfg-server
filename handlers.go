@@ -917,23 +917,13 @@ func (s *Server) PUTDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GETDisabledGolfer(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	if name == "" {
-		http.Error(w, "Missing name", http.StatusBadRequest)
+	var golfers []DisabledGolfer
+	if err := s.db.Find(&golfers).Error; err != nil {
+		http.Error(w, "Failed to fetch disabled golfer results", http.StatusInternalServerError)
 		return
 	}
 
-	var golfer DisabledGolfer
-	if err := s.db.First(&golfer, "name = ?", name).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, "Golfer not found", http.StatusNotFound)
-		} else {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	json.NewEncoder(w).Encode(golfer)
+	json.NewEncoder(w).Encode(&golfers)
 }
 
 func (s *Server) DELETEDisabledGolfer(w http.ResponseWriter, r *http.Request) {
@@ -1059,6 +1049,10 @@ func (s *Server) PUTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if input.BracketUrl != existing.BracketUrl && input.BracketUrl != "" {
+		updateMatchPlayResults(s.db, input.Year, input.BracketUrl)
+	}
+
 	// Update fields
 	existing.RegistrationOpen = input.RegistrationOpen
 	existing.BracketUrl = input.BracketUrl
@@ -1070,6 +1064,23 @@ func (s *Server) PUTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(existing)
+}
+
+func (s *Server) POSTRefreshMatchPlayBracket(w http.ResponseWriter, r *http.Request) {
+	var existing MatchPlayInfo
+	if err := s.db.First(&existing, 1).Error; err != nil {
+		http.Error(w, "MatchPlayInfo not found", http.StatusNotFound)
+		return
+	}
+
+	if existing.BracketUrl != "" {
+		if err := updateMatchPlayResults(s.db, existing.Year, existing.BracketUrl); err != nil {
+			http.Error(w, fmt.Sprintf("Error downloading new bracket: %s", err.Error()), http.StatusBadRequest)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) GETMatchPlayResults(w http.ResponseWriter, r *http.Request) {

@@ -124,8 +124,8 @@ func main() {
 	r.Get("/results/teams/{eventID}", s.GETTeamResults)
 	r.Get("/results/wgr/{eventID}", s.GETWgrResults)
 
-	r.Get("/disabled-golfers/{name}", s.GETDisabledGolfer)
-	r.Post("/disabled-golfers", authMiddleware(s.POSTDisabledGolfer))
+	r.Get("/disabled-golfers", s.GETDisabledGolfer)
+	r.Post("/disabled-golfers/{name}", authMiddleware(s.POSTDisabledGolfer))
 	r.Put("/disabled-golfers/{name}", authMiddleware(s.PUTDisabledGolfer))
 	r.Delete("/disabled-golfers/{name}", authMiddleware(s.DELETEDisabledGolfer))
 
@@ -136,6 +136,7 @@ func main() {
 
 	r.Get("/match-play", s.GETMatchPlayInfo)
 	r.Put("/match-play", authMiddleware(s.PUTMatchPlayInfo))
+	r.Post("/refresh-match-play-bracket", authMiddleware(s.POSTRefreshMatchPlayBracket))
 	r.Get("/match-play/results", s.GETMatchPlayResults)
 
 	r.Get("/current-year", s.GETCurrentYear)
