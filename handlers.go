@@ -727,34 +727,16 @@ func (s *Server) GETNetResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch net results
-	var netResults []NetResult
-	if err := s.db.Where("event_id = ?", eventID).Order("rank ASC").Find(&netResults).Error; err != nil {
-		http.Error(w, "Error fetching net results", http.StatusInternalServerError)
+	var results []NetResult
+	if err := s.db.Where("event_id = ?", eventID).Order("rank ASC").Find(&results).Error; err != nil {
+		http.Error(w, "Error fetching gross results", http.StatusInternalServerError)
 		return
 	}
-	sort.Slice(netResults, func(i, j int) bool {
-		return parseRank(netResults[i].Rank) < parseRank(netResults[j].Rank)
+	sort.Slice(results, func(i, j int) bool {
+		return parseRank(results[i].Rank) < parseRank(results[j].Rank)
 	})
 
-	// Check existence of other result types
-	var grossExists, skinsExists, teamsExists, wgrExists bool
-
-	s.db.Model(&GrossResult{}).Where("event_id = ?", eventID).Limit(1).Select("1").Scan(&grossExists)
-	s.db.Model(&SkinsPlayerResult{}).Where("event_id = ?", eventID).Limit(1).Select("1").Scan(&skinsExists)
-	s.db.Model(&TeamResult{}).Where("event_id = ?", eventID).Limit(1).Select("1").Scan(&teamsExists)
-	s.db.Model(&WGRResult{}).Where("event_id = ?", eventID).Limit(1).Select("1").Scan(&wgrExists)
-
-	resp := map[string]any{
-		"hasGross": grossExists,
-		"hasSkins": skinsExists,
-		"hasTeams": teamsExists,
-		"hasWgr":   wgrExists,
-		"results":  netResults,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(results)
 }
 
 func (s *Server) GETGrossResults(w http.ResponseWriter, r *http.Request) {
@@ -796,6 +778,9 @@ func (s *Server) GETSkinsResults(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(players, func(i, j int) bool {
 		return parseRank(players[i].Rank) < parseRank(players[j].Rank)
+	})
+	sort.Slice(holes, func(i, j int) bool {
+		return parseHole(holes[i].Hole) < parseHole(holes[j].Hole)
 	})
 
 	resp := map[string]any{
@@ -866,6 +851,13 @@ func (s *Server) GETCurrentYear(w http.ResponseWriter, r *http.Request) {
 func parseRank(r string) int {
 	r = strings.TrimPrefix(r, "T")
 	n, err := strconv.Atoi(r)
+	if err != nil {
+		return 9999 // fallback to bottom if unparsable
+	}
+	return n
+}
+func parseHole(s string) int {
+	n, err := strconv.Atoi(s)
 	if err != nil {
 		return 9999 // fallback to bottom if unparsable
 	}
