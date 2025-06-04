@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jessevdk/go-flags"
 	"github.com/ulule/limiter/v3"
 	memstore "github.com/ulule/limiter/v3/drivers/store/memory"
 	"golang.org/x/crypto/bcrypt"
@@ -28,6 +29,10 @@ const (
 	userContextKey = contextKey("user")
 )
 
+type Options struct {
+	Dev bool `long:"dev" description:"Use run a development server on localhost"`
+}
+
 type contextKey string
 
 type Server struct {
@@ -35,6 +40,7 @@ type Server struct {
 	r                chi.Router
 	imageDir         string
 	loginRateLimiter *limiter.Limiter
+	devMode          bool
 }
 
 var (
@@ -51,6 +57,13 @@ func init() {
 }
 
 func main() {
+	var opts Options
+	parser := flags.NewNamedParser("faucet", flags.Default)
+	parser.AddGroup("Options", "Configuration options for the server", &opts)
+	if _, err := parser.Parse(); err != nil {
+		return
+	}
+
 	db, dataDir, err := initDatabase()
 	if err != nil {
 		log.Fatalf("Database initialization errored: %s", err)
@@ -83,6 +96,7 @@ func main() {
 		r:                r,
 		imageDir:         path.Join(dataDir, imageDirName),
 		loginRateLimiter: lim,
+		devMode:          opts.Dev,
 	}
 
 	r.Post("/login", s.POSTLoginHandler)
