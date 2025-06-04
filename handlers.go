@@ -958,14 +958,8 @@ func (s *Server) POSTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GETColonyCupInfo(w http.ResponseWriter, r *http.Request) {
-	year := chi.URLParam(r, "year")
-	if year == "" {
-		http.Error(w, "Missing year", http.StatusBadRequest)
-		return
-	}
-
 	var info ColonyCupInfo
-	if err := s.db.First(&info, "year = ?", year).Error; err != nil {
+	if err := s.db.Order("year DESC").First(&info).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			http.Error(w, "Record not found", http.StatusNotFound)
 		} else {
@@ -979,24 +973,19 @@ func (s *Server) GETColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) PUTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
-	year := chi.URLParam(r, "year")
-	if year == "" {
-		http.Error(w, "Missing year", http.StatusBadRequest)
-		return
-	}
-
 	var updated ColonyCupInfo
 	if err := json.NewDecoder(r.Body).Decode(&updated); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
-	updated.Year = year
 
 	var existing ColonyCupInfo
-	if err := s.db.First(&existing, "year = ?", year).Error; err != nil {
+	if err := s.db.First(&existing).Error; err != nil {
 		http.Error(w, "Record not found", http.StatusNotFound)
 		return
 	}
+	existing.Year = updated.Year
+	existing.WinningTeam = updated.WinningTeam
 
 	if err := s.db.Save(&updated).Error; err != nil {
 		http.Error(w, "Error updating record", http.StatusInternalServerError)
@@ -1004,21 +993,6 @@ func (s *Server) PUTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(updated)
-}
-
-func (s *Server) DELETEColonyCupInfo(w http.ResponseWriter, r *http.Request) {
-	year := chi.URLParam(r, "year")
-	if year == "" {
-		http.Error(w, "Missing year", http.StatusBadRequest)
-		return
-	}
-
-	if err := s.db.Unscoped().Delete(&ColonyCupInfo{}, "year = ?", year).Error; err != nil {
-		http.Error(w, "Error deleting record", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) GETMatchPlayInfo(w http.ResponseWriter, r *http.Request) {

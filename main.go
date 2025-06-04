@@ -129,10 +129,8 @@ func main() {
 	r.Put("/disabled-golfers/{name}", authMiddleware(s.PUTDisabledGolfer))
 	r.Delete("/disabled-golfers/{name}", authMiddleware(s.DELETEDisabledGolfer))
 
-	r.Get("/colony-cup/{year}", s.GETColonyCupInfo)
-	r.Post("/colony-cup", authMiddleware(s.POSTColonyCupInfo))
-	r.Put("/colony-cup/{year}", authMiddleware(s.PUTColonyCupInfo))
-	r.Delete("/colony-cup/{year}", authMiddleware(s.DELETEColonyCupInfo))
+	r.Get("/colony-cup", s.GETColonyCupInfo)
+	r.Put("/colony-cup", authMiddleware(s.PUTColonyCupInfo))
 
 	r.Get("/match-play", s.GETMatchPlayInfo)
 	r.Put("/match-play", authMiddleware(s.PUTMatchPlayInfo))
@@ -194,6 +192,11 @@ func initDatabase() (*gorm.DB, string, error) {
 			result = db.Create(&MatchPlayInfo{
 				RegistrationOpen: false,
 			})
+			if result.Error != nil {
+				return nil, "", err
+			}
+
+			result = db.Create(&ColonyCupInfo{})
 			if result.Error != nil {
 				return nil, "", err
 			}
