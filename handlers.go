@@ -1050,12 +1050,16 @@ func (s *Server) PUTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if input.BracketUrl != existing.BracketUrl && input.BracketUrl != "" {
-		updateMatchPlayResults(s.db, input.Year, input.BracketUrl)
+		if err := updateMatchPlayResults(s.db, input.Year, input.BracketUrl); err != nil {
+			fmt.Println("*******", err)
+		}
 	}
 
 	// Update fields
+	existing.Year = input.Year
 	existing.RegistrationOpen = input.RegistrationOpen
 	existing.BracketUrl = input.BracketUrl
+	existing.ShopifyUrl = input.ShopifyUrl
 
 	if err := s.db.Save(&existing).Error; err != nil {
 		http.Error(w, "Failed to update record", http.StatusInternalServerError)
