@@ -379,6 +379,15 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Find("td").Eq(3). // fourth <td>
 				Text()
 
+			score := dataRows[i+1].
+				Find("td").Eq(3).  // second <td>
+				Find("a").First(). // first <span> inside it
+				Text()
+
+			if score == "Tied" {
+				score = ""
+			}
+			score = strings.TrimPrefix(score, " ")
 			match := &MatchPlayMatch{
 				Year:     year,
 				Round:    roundNames[1],
@@ -386,6 +395,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Player2:  player2,
 				MatchNum: matchNum,
 				Winner:   winner,
+				Score:    score,
 			}
 			matches = append(matches, match)
 			matchNum++
@@ -422,12 +432,23 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 					Find("td").Eq(5 + n). // fourth <td>
 					Text()
 
+				score := dataRows[i+1].
+					Find("td").Eq(5 + n). // second <td>
+					Find("a").First().    // first <span> inside it
+					Text()
+
+				if score == "Tied" {
+					score = ""
+				}
+				score = strings.TrimPrefix(score, " ")
+
 				matches = append(matches, &MatchPlayMatch{
 					Year:     year,
 					Round:    roundNames[col],
 					Player1:  player1,
 					Player2:  player2,
 					Winner:   winner,
+					Score:    score,
 					MatchNum: matchNum,
 				})
 				nextRows = append(nextRows, rowsCopy[i])
