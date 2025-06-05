@@ -376,18 +376,18 @@ func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result := s.db.Create(&event)
+	if result.Error != nil {
+		http.Error(w, fmt.Sprintf("Error saving new event: %s", result.Error.Error()), http.StatusBadRequest)
+		return
+	}
+
 	// Save thumbnail
 	if filename, err := s.saveThumbnail(r, event.EventID); err != nil {
 		http.Error(w, "Failed to save thumbnail", http.StatusInternalServerError)
 		return
 	} else if filename != "" {
 		event.Thumbnail = filename
-	}
-
-	result := s.db.Create(&event)
-	if result.Error != nil {
-		http.Error(w, fmt.Sprintf("Error saving new event: %s", result.Error.Error()), http.StatusBadRequest)
-		return
 	}
 
 	if event.ResultsUpdated() {
