@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"github.com/gocolly/colly"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -382,11 +385,37 @@ func Test_updateMatchPlayResults(t *testing.T) {
 	err = db.Find(&matchPlayMatches).Error
 	assert.NoError(t, err)
 
-	assert.Len(t, matchPlayMatches, 16)
-	assert.Equal(t, matchPlayMatches[0].Year, "2025")
-	assert.Equal(t, matchPlayMatches[0].Round, "Round 1")
-	assert.Equal(t, matchPlayMatches[0].Player1, "Ricky Dichard")
-	assert.Equal(t, matchPlayMatches[0].Player2, "Bye")
-	assert.Equal(t, matchPlayMatches[0].Winner, "Ricky Dichard")
-	assert.Equal(t, matchPlayMatches[0].MatchNum, 1)
+	assert.Len(t, matchPlayMatches, 18)
+	assert.Equal(t, matchPlayMatches[1].Year, "2025")
+	assert.Equal(t, matchPlayMatches[1].Round, "Round 1")
+	assert.Equal(t, matchPlayMatches[1].Player1, "Chris Pacia")
+	assert.Equal(t, matchPlayMatches[1].Player2, "Scott Smith")
+	assert.Equal(t, matchPlayMatches[1].Winner, "Scott Smith")
+	assert.Equal(t, matchPlayMatches[1].MatchNum, 16)
+
+	for i, m := range matchPlayMatches {
+		fmt.Println("Index: ", i, "Matchnum:", m.MatchNum, "Year:", m.Year, "Round:", m.Round, "Player1:", m.Player1, "PLayer2:", m.Player2, "Winner:", m.Winner)
+	}
+	fmt.Println(len(matchPlayMatches))
+}
+
+func TestPrintHtml(t *testing.T) {
+	// Create a new collector
+	c := colly.NewCollector()
+
+	// Set up a callback to print the raw HTML
+	c.OnResponse(func(r *colly.Response) {
+		fmt.Println(string(r.Body)) // Print the HTML
+	})
+
+	// Optional: log errors
+	c.OnError(func(_ *colly.Response, err error) {
+		log.Println("Something went wrong:", err)
+	})
+
+	// Start scraping
+	err := c.Visit("https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc259/contest/1/leaderboard.htm")
+	if err != nil {
+		log.Fatal(err)
+	}
 }

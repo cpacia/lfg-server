@@ -311,9 +311,14 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		return strings.TrimSpace(cells.Eq(idx).Text())
 	}
 
-	// Grabs the full‐name <span> inside a <td> (ignores the abbreviated span)
-	getFullName := func(cell *goquery.Selection) string {
-		return strings.TrimSpace(cell.Find("span").First().Text())
+	// getPlayerName returns the full player name if wrapped in a <span>,
+	// otherwise it returns the trimmed text of the cell itself.
+	getPlayerName := func(cell *goquery.Selection) string {
+		full := strings.TrimSpace(cell.Find("span").First().Text())
+		if full != "" {
+			return full
+		}
+		return strings.TrimSpace(cell.Text())
 	}
 
 	c.OnHTML("table.matchtree", func(e *colly.HTMLElement) {
@@ -335,9 +340,9 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		for j := 0; j < headerCells.Length(); j++ {
 			label := getText(headerCells, j)
 			if label == "" || strings.EqualFold(label, "Season long match play") {
-				// skip columns labeled “Season long match play” if you don’t want that as a round
 				continue
 			}
+			// Each header cell j corresponds to td‐column j*2
 			roundNames[j*2] = label
 		}
 
@@ -362,21 +367,25 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		for _, col := range cols {
 			roundLabel := strings.TrimSuffix(roundNames[col], " Matches")
 
-			// Walk dataRows; whenever we see a NON‐EMPTY <span> in td[col+1], that's “player1”
+			// ── Inner loop for this column ──
 			for i := 0; i < len(dataRows); i++ {
 				cells1 := dataRows[i].Find("td")
 				if cells1.Length() <= col+1 {
 					continue
 				}
 
-				// Look for a full name in td[col+1]
-				player1 := getFullName(cells1.Eq(col + 1))
+				// 1) Only treat td[col+1] as a player if it has no <a> and getPlayerName != ""
+				nameCell1 := cells1.Eq(col + 1)
+				if nameCell1.Find("a").Length() > 0 {
+					// This is a “score” row (e.g. <a>4&2</a> or <a>Tied</a>), skip it
+					continue
+				}
+				player1 := getPlayerName(nameCell1)
 				if player1 == "" {
-					// no player in this cell → skip
 					continue
 				}
 
-				// Grab seedText only if present (for MatchNum). If empty, MatchNum stays 0.
+				// 2) Read seedText at td[col] if present, for MatchNum
 				seedText := getText(cells1, col)
 				matchNum := 0
 				if seedText != "" {
@@ -387,7 +396,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 					}
 				}
 
-				// Find the next row j>i that has a non‐empty player in td[col+1]
+				// 3) Find the partner row for player2
 				var player2 string
 				var partnerIdx int
 				for j := i + 1; j < len(dataRows); j++ {
@@ -395,7 +404,12 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 					if candCells.Length() <= col+1 {
 						continue
 					}
-					candidate := getFullName(candCells.Eq(col + 1))
+					nameCell2 := candCells.Eq(col + 1)
+					if nameCell2.Find("a").Length() > 0 {
+						// Skip “score” rows
+						continue
+					}
+					candidate := getPlayerName(nameCell2)
 					if candidate != "" {
 						player2 = candidate
 						partnerIdx = j
@@ -403,11 +417,11 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 					}
 				}
 				if player2 == "" {
-					// no opponent found → skip
+					// No opponent found → skip
 					continue
 				}
 
-				// If opponent is “Bye,” award player1 the win immediately
+				// 4) If opponent is “Bye,” player1 wins
 				if strings.EqualFold(player2, "Bye") {
 					matches = append(matches, &MatchPlayMatch{
 						Year:     year,
@@ -417,34 +431,57 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 						Winner:   player1,
 						MatchNum: matchNum,
 					})
-					// skip past that “opponent” row
 					i = partnerIdx
 					continue
 				}
 
-				// Otherwise, two real players. Check who actually advanced by looking at td[col+3].
+				// 5) Two real players: decide winner by looking at td[col+3]
 				var winner string
 
-				//  → check if player1 advanced: see if td[col+3] on the same row has a non‐empty full name
-				if cells1.Length() > col+3 {
-					fullNext := getFullName(cells1.Eq(col + 3))
-					if fullNext != "" && !strings.EqualFold(fullNext, "Bye") {
+				// Helper to get last token (last name, or “II”, etc.)
+				getLastToken := func(full string) string {
+					parts := strings.Fields(full)
+					if len(parts) == 0 {
+						return ""
+					}
+					return parts[len(parts)-1]
+				}
+
+				// Look at the next‐round name cell for player1’s row (col+3)
+				nextCellA := cells1.Eq(col + 3)
+				nextNameA := ""
+				if nextCellA.Find("a").Length() == 0 {
+					nextNameA = getPlayerName(nextCellA)
+				}
+				if nextNameA != "" {
+					tokenA := getLastToken(nextNameA)
+					if tokenA == getLastToken(player1) {
 						winner = player1
+					} else if tokenA == getLastToken(player2) {
+						winner = player2
 					}
 				}
 
-				//  → if not set, check if player2 advanced by looking at dataRows[partnerIdx].td[col+3]
+				// If no winner yet, check partner’s next‐round cell
 				if winner == "" {
-					cand2 := dataRows[partnerIdx].Find("td")
-					if cand2.Length() > col+3 {
-						fullNext2 := getFullName(cand2.Eq(col + 3))
-						if fullNext2 != "" && !strings.EqualFold(fullNext2, "Bye") {
-							winner = player2
+					candCells := dataRows[partnerIdx].Find("td")
+					if candCells.Length() > col+3 {
+						nextCellB := candCells.Eq(col + 3)
+						if nextCellB.Find("a").Length() == 0 {
+							nextNameB := getPlayerName(nextCellB)
+							if nextNameB != "" {
+								tokenB := getLastToken(nextNameB)
+								if tokenB == getLastToken(player1) {
+									winner = player1
+								} else if tokenB == getLastToken(player2) {
+									winner = player2
+								}
+							}
 						}
 					}
 				}
-				// If still winner == "", match wasn’t played yet.
 
+				// 6) Append match record
 				matches = append(matches, &MatchPlayMatch{
 					Year:     year,
 					Round:    roundLabel,
@@ -454,9 +491,10 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 					MatchNum: matchNum,
 				})
 
-				// Skip past the opponent’s row to avoid double‐counting
+				// 7) Skip the partner row
 				i = partnerIdx
 			}
+			// ── End of inner loop ──
 		}
 	})
 
