@@ -376,6 +376,7 @@ func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create first to get eventID
 	result := s.db.Create(&event)
 	if result.Error != nil {
 		http.Error(w, fmt.Sprintf("Error saving new event: %s", result.Error.Error()), http.StatusBadRequest)
@@ -383,12 +384,16 @@ func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save thumbnail
-	if filename, err := s.saveThumbnail(r, event.EventID); err != nil {
+	filename, err := s.saveThumbnail(r, event.EventID)
+	if err != nil {
 		http.Error(w, "Failed to save thumbnail", http.StatusInternalServerError)
 		return
-	} else if filename != "" {
+	}
+	if filename != "" {
 		event.Thumbnail = filename
 	}
+
+	s.db.Save(&event)
 
 	if event.ResultsUpdated() {
 		err := updateResults(s.db, event.EventID,
@@ -441,10 +446,12 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	updated.EventID = existing.EventID
 
-	if filename, err := s.saveThumbnail(r, updated.EventID); err != nil {
+	filename, err := s.saveThumbnail(r, updated.EventID)
+	if err != nil {
 		http.Error(w, "Failed to save thumbnail", http.StatusInternalServerError)
 		return
-	} else if filename != "" {
+	}
+	if filename != "" {
 		updated.Thumbnail = filename
 	}
 

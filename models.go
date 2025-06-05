@@ -5,6 +5,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -66,11 +67,18 @@ func (e *Event) BeforeCreate(tx *gorm.DB) (err error) {
 	t := time.Time(e.Date)
 	year := t.Year()
 
-	// Sanitize the name to avoid spaces or weird characters in the ID
-	nameSlug := strings.ReplaceAll(strings.ToLower(e.Name), " ", "-")
+	name := strings.ToLower(e.Name)
+	name = strings.ReplaceAll(name, " ", "-")
+
+	// Remove all non-alphanumeric/dash characters
+	reg := regexp.MustCompile(`[^a-z0-9\-]+`)
+	safeSlug := reg.ReplaceAllString(name, "")
+
+	// Ensure no leading/trailing dashes
+	safeSlug = strings.Trim(safeSlug, "-")
 
 	// Set the ID
-	e.EventID = fmt.Sprintf("%d-%s", year, nameSlug)
+	e.EventID = fmt.Sprintf("%d-%s", year, safeSlug)
 	return
 }
 
