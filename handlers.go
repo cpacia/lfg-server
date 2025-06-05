@@ -957,18 +957,30 @@ func (s *Server) POSTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GETColonyCupInfo(w http.ResponseWriter, r *http.Request) {
-	var info ColonyCupInfo
-	if err := s.db.Order("year DESC").First(&info).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, "Record not found", http.StatusNotFound)
-		} else {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-		}
+	var infos []ColonyCupInfo
+	if err := s.db.Order("year DESC").Limit(2).Find(&infos).Error; err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if len(infos) == 0 {
+		http.Error(w, "No records found", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(info)
+	json.NewEncoder(w).Encode(infos)
+}
+
+func (s *Server) GETAllColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+	var infos []ColonyCupInfo
+	if err := s.db.Order("year DESC").Find(&infos).Error; err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(infos)
 }
 
 func (s *Server) PUTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
@@ -992,6 +1004,37 @@ func (s *Server) PUTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(updated)
+}
+
+func (s *Server) DELETEColonyCupInfo(w http.ResponseWriter, r *http.Request) {
+	// Decode the incoming JSON to get the calendar year to delete
+	var payload struct {
+		Year string `json:"year"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Look up the existing record
+	colonyCupInfo := &ColonyCupInfo{}
+	result := s.db.First(colonyCupInfo, "year = ?", payload.Year)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			http.Error(w, "Colony cup year not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Delete the record
+	if err := s.db.Unscoped().Delete(&ColonyCupInfo{}, "year = ?", payload.Year).Error; err != nil {
+		http.Error(w, "Could not delete colony cup year", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) GETMatchPlayInfo(w http.ResponseWriter, r *http.Request) {

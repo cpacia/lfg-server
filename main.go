@@ -130,7 +130,10 @@ func main() {
 	r.Delete("/disabled-golfers/{name}", authMiddleware(s.DELETEDisabledGolfer))
 
 	r.Get("/colony-cup", s.GETColonyCupInfo)
+	r.Get("/colony-cup/all", s.GETAllColonyCupInfo)
+	r.Post("/colony-cup", authMiddleware(s.POSTColonyCupInfo))
 	r.Put("/colony-cup", authMiddleware(s.PUTColonyCupInfo))
+	r.Delete("/colony-cup", authMiddleware(s.DELETEColonyCupInfo))
 
 	r.Get("/match-play", s.GETMatchPlayInfo)
 	r.Put("/match-play", authMiddleware(s.PUTMatchPlayInfo))
@@ -187,11 +190,6 @@ func initDatabase() (*gorm.DB, string, error) {
 				return nil, "", err
 			}
 			result := db.Create(&DBCredentials{Username: "admin", PasswordHash: string(hash)})
-			if result.Error != nil {
-				return nil, "", err
-			}
-
-			result = db.Create(&ColonyCupInfo{})
 			if result.Error != nil {
 				return nil, "", err
 			}

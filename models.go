@@ -186,7 +186,8 @@ type MatchPlayMatch struct {
 type ColonyCupInfo struct {
 	gorm.Model
 	Year        string         `json:"year" gorm:"uniqueIndex"`
-	WinningTeam datatypes.JSON `gorm:"type:json" json:"winningTeam"`
+	Team        datatypes.JSON `gorm:"type:json" json:"team"`
+	WinningTeam bool           `json:"winningTeam"`
 }
 
 type SeasonRank struct {
