@@ -1168,7 +1168,6 @@ func (s *Server) GETMatchPlayResults(w http.ResponseWriter, r *http.Request) {
 	// Fetch match data
 	var matches []MatchPlayMatch
 	if err := s.db.Where("year = ?", targetYear).
-		Order("round").
 		Find(&matches).Error; err != nil {
 		http.Error(w, "Failed to fetch match play results", http.StatusInternalServerError)
 		return
