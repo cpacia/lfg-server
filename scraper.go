@@ -6,7 +6,6 @@ import (
 	"github.com/gocolly/colly"
 	"gorm.io/gorm"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -303,7 +302,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 
 	var matches []*MatchPlayMatch
 
-	// Trims text or returns "" if index is out of range
+	// Trims text or returns "" if idx is out of range
 	getText := func(cells *goquery.Selection, idx int) string {
 		if idx < 0 || idx >= cells.Length() {
 			return ""
@@ -311,27 +310,17 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		return strings.TrimSpace(cells.Eq(idx).Text())
 	}
 
-	// getPlayerName returns the full player name if wrapped in a <span>,
-	// otherwise it returns the trimmed text of the cell itself.
-	getPlayerName := func(cell *goquery.Selection) string {
-		full := strings.TrimSpace(cell.Find("span").First().Text())
-		if full != "" {
-			return full
-		}
-		return strings.TrimSpace(cell.Text())
-	}
-
 	c.OnHTML("table.matchtree", func(e *colly.HTMLElement) {
-		// 1) Gather all <tr> rows
 		var rows []*goquery.Selection
 		e.DOM.Find("tr").Each(func(_ int, sel *goquery.Selection) {
 			rows = append(rows, sel)
 		})
+
 		if len(rows) < 2 {
 			return
 		}
 
-		// 2) Read header <th> row to build col→roundLabel
+		// 2) Read header <th> row (rows[0]) to build map[colIndex]→roundLabel
 		headerCells := rows[0].Find("th")
 		if headerCells.Length() == 0 {
 			return
@@ -340,171 +329,121 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		for j := 0; j < headerCells.Length(); j++ {
 			label := getText(headerCells, j)
 			if label == "" || strings.EqualFold(label, "Season long match play") {
+				if strings.EqualFold(label, "Season long match play") {
+					roundNames[j+1] = "Champion"
+				}
 				continue
 			}
-			// Each header cell j corresponds to td‐column j*2
-			roundNames[j*2] = label
+			label = strings.TrimSuffix(label, " Matches")
+			// Each header cell j corresponds to td-column j*2
+			roundNames[j+1] = label
 		}
 
-		// 3) Build dataRows = all <tr> that have at least one <td>
-		var dataRows []*goquery.Selection
-		for i := 1; i < len(rows); i++ {
-			if rows[i].Find("td").Length() > 0 {
-				dataRows = append(dataRows, rows[i])
-			}
-		}
-		if len(dataRows) == 0 {
-			return
-		}
-
-		// 4) Iterate over columns (0, 2, 4, …) in sorted order
 		var cols []int
 		for col := range roundNames {
 			cols = append(cols, col)
 		}
 		sort.Ints(cols)
 
-		for _, col := range cols {
-			roundLabel := strings.TrimSuffix(roundNames[col], " Matches")
+		// 3) Build dataRows = all <tr> that have ≥1 <td>
+		// Every two rows has data we want with a separator row in between.
+		var dataRows []*goquery.Selection
+		for i := 2; i < len(rows); i += 3 {
+			if rows[i].Find("td").Length() > 0 {
+				dataRows = append(dataRows, rows[i])
+			}
+			if rows[i+1].Find("td").Length() > 0 {
+				dataRows = append(dataRows, rows[i+1])
+			}
+		}
+		if len(dataRows) == 0 {
+			return
+		}
 
-			// ── Inner loop for this column ──
-			for i := 0; i < len(dataRows); i++ {
-				cells1 := dataRows[i].Find("td")
-				if cells1.Length() <= col+1 {
+		// Iterate over the dataRows to get the first round match ups.
+		// The first rows have a different format than the rest.
+		matchNum := 0
+		var nextRows []*goquery.Selection
+		for i := 0; i < len(dataRows); i += 2 {
+			player1 := dataRows[i].
+				Find("td").Eq(1).     // second <td>
+				Find("span").First(). // first <span> inside it
+				Text()
+
+			player2 := dataRows[i+1].
+				Find("td").Eq(1).     // second <td>
+				Find("span").First(). // first <span> inside it
+				Text()
+
+			winner := dataRows[i].
+				Find("td").Eq(3). // fourth <td>
+				Text()
+
+			match := &MatchPlayMatch{
+				Year:     year,
+				Round:    roundNames[1],
+				Player1:  player1,
+				Player2:  player2,
+				MatchNum: matchNum,
+				Winner:   winner,
+			}
+			matches = append(matches, match)
+			matchNum++
+
+			nextRows = append(nextRows, dataRows[i])
+		}
+
+		// Now we're going to iterate over the rest of the columns.
+		// The next round data should be found as follows:
+		// Round2: indexes 0, 2, 4, 6, 8, 10, 12, 14
+		// Round3: indexes 0, 4, 8, 12
+		// Round4: indexes 0, 8
+		// etc
+		n := 0
+		for _, col := range cols[1:] {
+			rowsCopy := make([]*goquery.Selection, len(nextRows))
+			copy(rowsCopy, nextRows)
+			nextRows = make([]*goquery.Selection, 0, len(rowsCopy)/2)
+
+			matchNum = 0
+			for i := 0; i < len(rowsCopy); i += 2 {
+				if len(rowsCopy)-1 < i+1 {
 					continue
 				}
+				player1 := rowsCopy[i].
+					Find("td").Eq(3 + n). // fourth <td>
+					Text()
 
-				// 1) Only treat td[col+1] as a player if it has no <a> and getPlayerName != ""
-				nameCell1 := cells1.Eq(col + 1)
-				if nameCell1.Find("a").Length() > 0 {
-					// This is a “score” row (e.g. <a>4&2</a> or <a>Tied</a>), skip it
-					continue
-				}
-				player1 := getPlayerName(nameCell1)
-				if player1 == "" {
-					continue
-				}
+				player2 := rowsCopy[i+1].
+					Find("td").Eq(3 + n). // fourth <td>
+					Text()
 
-				// 2) Read seedText at td[col] if present, for MatchNum
-				seedText := getText(cells1, col)
-				matchNum := 0
-				if seedText != "" {
-					if idx := strings.TrimSuffix(seedText, "."); idx != "" {
-						if n, err := strconv.Atoi(idx); err == nil {
-							matchNum = n
-						}
-					}
-				}
+				winner := rowsCopy[i].
+					Find("td").Eq(5 + n). // fourth <td>
+					Text()
 
-				// 3) Find the partner row for player2
-				var player2 string
-				var partnerIdx int
-				for j := i + 1; j < len(dataRows); j++ {
-					candCells := dataRows[j].Find("td")
-					if candCells.Length() <= col+1 {
-						continue
-					}
-					nameCell2 := candCells.Eq(col + 1)
-					if nameCell2.Find("a").Length() > 0 {
-						// Skip “score” rows
-						continue
-					}
-					candidate := getPlayerName(nameCell2)
-					if candidate != "" {
-						player2 = candidate
-						partnerIdx = j
-						break
-					}
-				}
-				if player2 == "" {
-					// No opponent found → skip
-					continue
-				}
-
-				// 4) If opponent is “Bye,” player1 wins
-				if strings.EqualFold(player2, "Bye") {
-					matches = append(matches, &MatchPlayMatch{
-						Year:     year,
-						Round:    roundLabel,
-						Player1:  player1,
-						Player2:  player2,
-						Winner:   player1,
-						MatchNum: matchNum,
-					})
-					i = partnerIdx
-					continue
-				}
-
-				// 5) Two real players: decide winner by looking at td[col+3]
-				var winner string
-
-				// Helper to get last token (last name, or “II”, etc.)
-				getLastToken := func(full string) string {
-					parts := strings.Fields(full)
-					if len(parts) == 0 {
-						return ""
-					}
-					return parts[len(parts)-1]
-				}
-
-				// Look at the next‐round name cell for player1’s row (col+3)
-				nextCellA := cells1.Eq(col + 3)
-				nextNameA := ""
-				if nextCellA.Find("a").Length() == 0 {
-					nextNameA = getPlayerName(nextCellA)
-				}
-				if nextNameA != "" {
-					tokenA := getLastToken(nextNameA)
-					if tokenA == getLastToken(player1) {
-						winner = player1
-					} else if tokenA == getLastToken(player2) {
-						winner = player2
-					}
-				}
-
-				// If no winner yet, check partner’s next‐round cell
-				if winner == "" {
-					candCells := dataRows[partnerIdx].Find("td")
-					if candCells.Length() > col+3 {
-						nextCellB := candCells.Eq(col + 3)
-						if nextCellB.Find("a").Length() == 0 {
-							nextNameB := getPlayerName(nextCellB)
-							if nextNameB != "" {
-								tokenB := getLastToken(nextNameB)
-								if tokenB == getLastToken(player1) {
-									winner = player1
-								} else if tokenB == getLastToken(player2) {
-									winner = player2
-								}
-							}
-						}
-					}
-				}
-
-				// 6) Append match record
 				matches = append(matches, &MatchPlayMatch{
 					Year:     year,
-					Round:    roundLabel,
+					Round:    roundNames[col],
 					Player1:  player1,
 					Player2:  player2,
 					Winner:   winner,
 					MatchNum: matchNum,
 				})
-
-				// 7) Skip the partner row
-				i = partnerIdx
+				nextRows = append(nextRows, rowsCopy[i])
+				matchNum++
 			}
-			// ── End of inner loop ──
+			n += 2
 		}
 	})
 
-	// Visit and wait
+	// Visit URL and wait for scraping
 	if err := c.Visit(url); err != nil {
 		return err
 	}
 	c.Wait()
 
-	// Bulk‐insert: delete old for this year, then create new
+	// Bulk-insert: delete old for this year, then create new
 	if len(matches) > 0 {
 		return db.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Unscoped().Where("year = ?", year).Delete(&MatchPlayMatch{}).Error; err != nil {

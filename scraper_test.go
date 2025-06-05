@@ -383,13 +383,22 @@ func Test_updateMatchPlayResults(t *testing.T) {
 	err = db.Find(&matchPlayMatches).Error
 	assert.NoError(t, err)
 
-	assert.Len(t, matchPlayMatches, 18)
-	assert.Equal(t, matchPlayMatches[1].Year, "2025")
-	assert.Equal(t, matchPlayMatches[1].Round, "Round 1")
-	assert.Equal(t, matchPlayMatches[1].Player1, "Chris Pacia")
-	assert.Equal(t, matchPlayMatches[1].Player2, "Scott Smith")
-	assert.Equal(t, matchPlayMatches[1].Winner, "Scott Smith")
-	assert.Equal(t, matchPlayMatches[1].MatchNum, 16)
+	assert.Len(t, matchPlayMatches, 31)
+	assert.Equal(t, "2025", matchPlayMatches[1].Year, "2025")
+	assert.Equal(t, "Round 1", matchPlayMatches[1].Round)
+	assert.Equal(t, "Chris Pacia", matchPlayMatches[1].Player1)
+	assert.Equal(t, "Scott Smith", matchPlayMatches[1].Player2)
+	assert.Equal(t, "S. Smith", matchPlayMatches[1].Winner)
+	assert.Equal(t, 1, matchPlayMatches[1].MatchNum)
+
+	assert.Equal(t, "R. Dichard", matchPlayMatches[16].Player1)
+	assert.Equal(t, "S. Smith", matchPlayMatches[16].Player2)
+
+	assert.Equal(t, "C. Shaw", matchPlayMatches[19].Player1)
+	assert.Equal(t, "S. Dowd", matchPlayMatches[19].Player2)
+
+	assert.Equal(t, "J. Tokanel", matchPlayMatches[20].Player1)
+	assert.Equal(t, "", matchPlayMatches[20].Player2)
 
 	for i, m := range matchPlayMatches {
 		fmt.Println("Index: ", i, "Matchnum:", m.MatchNum, "Year:", m.Year, "Round:", m.Round, "Player1:", m.Player1, "PLayer2:", m.Player2, "Winner:", m.Winner)
