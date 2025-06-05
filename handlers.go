@@ -1035,9 +1035,15 @@ func (s *Server) PUTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var existing MatchPlayInfo
-	if err := s.db.First(&existing, 1).Error; err != nil {
-		http.Error(w, "MatchPlayInfo not found", http.StatusNotFound)
+	// Fetch existing record
+	existing := &MatchPlayInfo{}
+	result := s.db.First(existing, "year = ?", input.Year)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			http.Error(w, "Match play not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
 		return
 	}
 
