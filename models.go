@@ -175,12 +175,12 @@ type MatchPlayInfo struct {
 type MatchPlayMatch struct {
 	gorm.Model
 	Year     string `gorm:"index"`
-	Round    string // e.g. "Round of 32", "Quarterfinals", etc.
-	Player1  string
-	Player2  string
-	Winner   string // Optional: empty if not yet played
-	Score    string
-	MatchNum int // Optional: for ordering within round
+	Round    string `json:"round"` // e.g. "Round of 32", "Quarterfinals", etc.
+	Player1  string `json:"player1"`
+	Player2  string `json:"player2"`
+	Winner   string `json:"winner"` // Optional: empty if not yet played
+	Score    string `json:"score"`
+	MatchNum int    `json:"matchNum"` // Optional: for ordering within round
 }
 
 type ColonyCupInfo struct {
