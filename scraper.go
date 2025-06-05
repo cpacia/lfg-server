@@ -507,7 +507,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 	// Bulk‐insert: delete old for this year, then create new
 	if len(matches) > 0 {
 		return db.Transaction(func(tx *gorm.DB) error {
-			if err := tx.Where("year = ?", year).Delete(&MatchPlayMatch{}).Error; err != nil {
+			if err := tx.Unscoped().Where("year = ?", year).Delete(&MatchPlayMatch{}).Error; err != nil {
 				return err
 			}
 			return tx.Create(&matches).Error

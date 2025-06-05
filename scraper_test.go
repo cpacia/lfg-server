@@ -2,11 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/gocolly/colly"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -399,7 +397,7 @@ func Test_updateMatchPlayResults(t *testing.T) {
 	fmt.Println(len(matchPlayMatches))
 }
 
-func TestPrintHtml(t *testing.T) {
+/*func TestPrintHtml(t *testing.T) {
 	// Create a new collector
 	c := colly.NewCollector()
 
@@ -418,4 +416,4 @@ func TestPrintHtml(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
+}*/
