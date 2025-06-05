@@ -134,6 +134,8 @@ func main() {
 
 	r.Get("/match-play", s.GETMatchPlayInfo)
 	r.Put("/match-play", authMiddleware(s.PUTMatchPlayInfo))
+	r.Post("/match-play", authMiddleware(s.POSTMatchPlayInfo))
+	r.Delete("/match-play", authMiddleware(s.DELETEMatchPlayInfo))
 	r.Post("/refresh-match-play-bracket", authMiddleware(s.POSTRefreshMatchPlayBracket))
 	r.Get("/match-play/results", s.GETMatchPlayResults)
 
@@ -185,13 +187,6 @@ func initDatabase() (*gorm.DB, string, error) {
 				return nil, "", err
 			}
 			result := db.Create(&DBCredentials{Username: "admin", PasswordHash: string(hash)})
-			if result.Error != nil {
-				return nil, "", err
-			}
-
-			result = db.Create(&MatchPlayInfo{
-				RegistrationOpen: false,
-			})
 			if result.Error != nil {
 				return nil, "", err
 			}

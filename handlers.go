@@ -995,18 +995,37 @@ func (s *Server) PUTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GETMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
-	var info MatchPlayInfo
-	if err := s.db.First(&info, 1).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, "MatchPlayInfo not found", http.StatusNotFound)
-		} else {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-		}
+	var dbMatchPlayInfos []MatchPlayInfo
+	result := s.db.Find(&dbMatchPlayInfos)
+	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dbMatchPlayInfos)
+}
+
+func (s *Server) POSTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
+	var input MatchPlayInfo
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
+	if err := s.db.Create(&input).Error; err != nil {
+		http.Error(w, "Could not save standings", http.StatusInternalServerError)
+		return
+	}
+
+	if input.BracketUrl != "" {
+		if err := updateMatchPlayResults(s.db, input.Year, input.BracketUrl); err != nil {
+			fmt.Println("*******", err)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(info)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(input)
 }
 
 func (s *Server) PUTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
@@ -1043,10 +1062,45 @@ func (s *Server) PUTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(existing)
 }
 
+func (s *Server) DELETEMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
+	// Decode the incoming JSON to get the calendar year to delete
+	var payload struct {
+		Year string `json:"year"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Look up the existing record
+	matchPlayInfo := &MatchPlayInfo{}
+	result := s.db.First(matchPlayInfo, "year = ?", payload.Year)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			http.Error(w, "Match play year not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Delete the record
+	if err := s.db.Unscoped().Delete(&MatchPlayInfo{}, "year = ?", payload.Year).Error; err != nil {
+		http.Error(w, "Could not delete match play year", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) POSTRefreshMatchPlayBracket(w http.ResponseWriter, r *http.Request) {
 	var existing MatchPlayInfo
-	if err := s.db.First(&existing, 1).Error; err != nil {
-		http.Error(w, "MatchPlayInfo not found", http.StatusNotFound)
+	err := s.db.Order("year DESC").First(&existing).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		http.Error(w, "Error loading match play from db", http.StatusInternalServerError)
+		return
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		http.Error(w, "Match Play not saved yet", http.StatusBadRequest)
 		return
 	}
 

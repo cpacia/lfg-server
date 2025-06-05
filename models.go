@@ -166,7 +166,7 @@ type DisabledGolfer struct {
 
 type MatchPlayInfo struct {
 	gorm.Model
-	Year             string `json:"year"`
+	Year             string `json:"year" gorm:"uniqueIndex"`
 	RegistrationOpen bool   `json:"registrationOpen"`
 	BracketUrl       string `json:"bracketUrl"`
 	ShopifyUrl       string `json:"shopifyUrl"`
