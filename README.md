@@ -10,6 +10,7 @@ r.Post("/api/login", s.POSTLoginHandler)
 r.Post("/api/logout", s.POSTLogoutHandler)
 r.Get("/api/auth/me", authMiddleware(s.POSTAuthMe))
 r.Post("/api/change-password", authMiddleware(s.POSTChangePasswordHandler))
+r.Get("/api/data-directory", authMiddleware(s.GETDataDirectory))
 
 r.Get("/api/standings", s.GETStandings)
 r.Get("/api/standings-urls", s.GETStandingsUrls)

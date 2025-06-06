@@ -41,6 +41,7 @@ type Server struct {
 	db               *gorm.DB
 	r                chi.Router
 	imageDir         string
+	dataDir          string
 	loginRateLimiter *limiter.Limiter
 	devMode          bool
 }
@@ -97,6 +98,7 @@ func main() {
 		db:               db,
 		r:                r,
 		imageDir:         path.Join(dataDir, imageDirName),
+		dataDir:          dataDir,
 		loginRateLimiter: lim,
 		devMode:          opts.Dev,
 	}
@@ -105,6 +107,7 @@ func main() {
 	r.Post("/api/logout", s.POSTLogoutHandler)
 	r.Get("/api/auth/me", authMiddleware(s.POSTAuthMe))
 	r.Post("/api/change-password", authMiddleware(s.POSTChangePasswordHandler))
+	r.Get("/api/data-directory", authMiddleware(s.GETDataDirectory))
 
 	r.Get("/api/standings", s.GETStandings)
 	r.Get("/api/standings-urls", s.GETStandingsUrls)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1242,4 +1243,74 @@ func (s *Server) GETMatchPlayResults(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) GETDataDirectory(w http.ResponseWriter, r *http.Request) {
+	directoryToZip := s.dataDir
+
+	// Make sure the directory exists
+	info, err := os.Stat(directoryToZip)
+	if err != nil || !info.IsDir() {
+		http.Error(w, "Directory not found", http.StatusNotFound)
+		return
+	}
+
+	// Name of the downloaded .zip file
+	zipName := "lfg-server-data.zip"
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+zipName+`"`)
+
+	// Create a zip.Writer that writes directly to the http.ResponseWriter
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	// Walk the directory tree
+	filepath.Walk(directoryToZip, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			// Abort on any file-system error
+			return err
+		}
+
+		// Compute the path within the ZIP file (make it relative)
+		relPath, err := filepath.Rel(filepath.Dir(directoryToZip), path)
+		if err != nil {
+			return err
+		}
+		// We don't want the ZIP entries to begin with “../…”, trim any leading separators
+		relPath = strings.TrimPrefix(relPath, string(filepath.Separator))
+
+		// If this is a directory, create a folder entry (with trailing slash)
+		if fi.IsDir() {
+			if relPath == "" {
+				// Skip the root directory itself; zip.Writer will create directories implicitly
+				return nil
+			}
+			_, err := zipWriter.Create(relPath + "/")
+			return err
+		}
+
+		// For files, open and copy into a new zip entry
+		inFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer inFile.Close()
+
+		// Create the file header in the zip (preserving file permissions)
+		header, err := zip.FileInfoHeader(fi)
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+		// Use deflate compression
+		header.Method = zip.Deflate
+
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		_, err = io.Copy(writer, inFile)
+		return err
+	})
 }
