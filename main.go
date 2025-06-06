@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -172,6 +173,7 @@ func initDatabase(dataDirOpt string) (*gorm.DB, string, error) {
 	} else {
 		dataDirPath = dataDirOpt
 	}
+	fmt.Println("Using data directory:", dataDirPath)
 
 	err := os.MkdirAll(path.Join(dataDirPath, imageDirName), os.ModePerm)
 	if err != nil {
