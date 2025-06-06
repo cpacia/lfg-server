@@ -164,6 +164,8 @@ func initDatabase() (*gorm.DB, string, error) {
 		homeDir = os.Getenv("HOME")
 	}
 
+	homeDir = "./"
+
 	dataDirPath := path.Join(homeDir, dataDir)
 
 	err = os.MkdirAll(path.Join(dataDirPath, imageDirName), os.ModePerm)
