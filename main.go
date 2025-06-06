@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -31,7 +30,8 @@ const (
 )
 
 type Options struct {
-	Dev bool `long:"dev" description:"Use run a development server on localhost"`
+	Dev     bool   `long:"dev" description:"Use run a development server on localhost"`
+	DataDir string `short:"d" long:"datadir" description:"Data directory to use for the db and images"`
 }
 
 type contextKey string
@@ -65,7 +65,7 @@ func main() {
 		return
 	}
 
-	db, dataDir, err := initDatabase()
+	db, dataDir, err := initDatabase(opts.DataDir)
 	if err != nil {
 		log.Fatalf("Database initialization errored: %s", err)
 	}
@@ -150,33 +150,30 @@ func main() {
 
 // Check to see if the database exists. If not create it and initialize
 // it with a default admin password to be changed later.
-func initDatabase() (*gorm.DB, string, error) {
-	// Get the OS specific home directory via the Go standard lib.
-	var homeDir string
-	usr, err := user.Current()
-	if err == nil {
-		homeDir = usr.HomeDir
+func initDatabase(dataDirOpt string) (*gorm.DB, string, error) {
+
+	var dataDirPath string
+	if dataDirOpt == "" {
+		// Get the OS specific home directory via the Go standard lib.
+		var homeDir string
+		usr, err := user.Current()
+		if err == nil {
+			homeDir = usr.HomeDir
+		}
+
+		// Fall back to standard HOME environment variable that works
+		// for most POSIX OSes if the directory from the Go standard
+		// lib failed.
+		if err != nil || homeDir == "" {
+			homeDir = os.Getenv("HOME")
+		}
+
+		dataDirPath = path.Join(homeDir, dataDir)
+	} else {
+		dataDirPath = dataDirOpt
 	}
 
-	// Fall back to standard HOME environment variable that works
-	// for most POSIX OSes if the directory from the Go standard
-	// lib failed.
-	if err != nil || homeDir == "" {
-		homeDir = os.Getenv("HOME")
-	}
-
-	dir, _ := os.Getwd()
-	fmt.Println("****", dir)
-
-	homeDir = "./"
-
-	dataDirPath := path.Join(homeDir, dataDir)
-	_, err = os.Stat(dataDirPath)
-	if os.IsNotExist(err) {
-		fmt.Println("Directory does not exist.")
-	}
-
-	err = os.MkdirAll(path.Join(dataDirPath, imageDirName), os.ModePerm)
+	err := os.MkdirAll(path.Join(dataDirPath, imageDirName), os.ModePerm)
 	if err != nil {
 		return nil, "", err
 	}
