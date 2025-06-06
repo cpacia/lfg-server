@@ -5,7 +5,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -71,11 +70,7 @@ func (e *Event) BeforeCreate(tx *gorm.DB) (err error) {
 	name = strings.ReplaceAll(name, " ", "-")
 
 	// Remove all non-alphanumeric/dash characters
-	reg := regexp.MustCompile(`[^a-z0-9\-]+`)
-	safeSlug := reg.ReplaceAllString(name, "")
-
-	// Ensure no leading/trailing dashes
-	safeSlug = strings.Trim(safeSlug, "-")
+	safeSlug := basicSanitize(name)
 
 	// Set the ID
 	e.EventID = fmt.Sprintf("%d-%s", year, safeSlug)
@@ -152,7 +147,7 @@ type WGRResult struct {
 
 type Standings struct {
 	gorm.Model
-	CalendarYear       string `json:"calendarYear" gorm:"unique"`
+	CalendarYear       string `json:"calendarYear" gorm:"uniqueIndex"`
 	SeasonStandingsUrl string `json:"seasonStandingsUrl"`
 	WgrStandingsUrl    string `json:"wgrStandingsUrl"`
 }

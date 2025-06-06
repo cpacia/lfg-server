@@ -13,11 +13,28 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
+
+func basicSanitize(input string) string {
+	reg := regexp.MustCompile(`[^a-z0-9\-]+`)
+	safeSlug := reg.ReplaceAllString(input, "")
+
+	// Ensure no leading/trailing dashes
+	return strings.Trim(safeSlug, "-")
+}
+
+func validateYear(yearStr string) bool {
+	y, err := strconv.Atoi(yearStr)
+	if err != nil {
+		return false
+	}
+	return y >= 2000 && y <= 2100
+}
 
 func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 	var creds Credentials
@@ -256,28 +273,23 @@ func (s *Server) POSTStandingsUrls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbStandings := &Standings{}
-	result := s.db.First(dbStandings, "calendar_year = ?", standings.CalendarYear)
-	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+	if !validateYear(standings.CalendarYear) {
+		http.Error(w, "Malformed year", http.StatusBadRequest)
 		return
 	}
-	dbStandings.CalendarYear = standings.CalendarYear
-	dbStandings.SeasonStandingsUrl = standings.SeasonStandingsUrl
-	dbStandings.WgrStandingsUrl = standings.WgrStandingsUrl
 
-	if err := s.db.Save(&dbStandings).Error; err != nil {
+	if err := s.db.Create(&standings).Error; err != nil {
 		http.Error(w, "Could not save standings", http.StatusInternalServerError)
 		return
 	}
-	if err := updateStandings(s.db, dbStandings); err != nil {
+	if err := updateStandings(s.db, &standings); err != nil {
 		http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(dbStandings)
+	json.NewEncoder(w).Encode(&standings)
 }
 
 func (s *Server) PUTStandingsUrls(w http.ResponseWriter, r *http.Request) {
@@ -324,6 +336,11 @@ func (s *Server) DELETEStandingsUrls(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if !validateYear(payload.CalendarYear) {
+		http.Error(w, "Malformed year", http.StatusBadRequest)
 		return
 	}
 
@@ -894,6 +911,8 @@ func (s *Server) POSTDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	golfer.Name = basicSanitize(golfer.Name)
+
 	if err := s.db.Create(&golfer).Error; err != nil {
 		http.Error(w, fmt.Sprintf("Error saving golfer: %s", err.Error()), http.StatusInternalServerError)
 		return
@@ -961,6 +980,11 @@ func (s *Server) POSTColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 	var info ColonyCupInfo
 	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if !validateYear(info.Year) {
+		http.Error(w, "Malformed year", http.StatusBadRequest)
 		return
 	}
 
@@ -1070,6 +1094,11 @@ func (s *Server) POSTMatchPlayInfo(w http.ResponseWriter, r *http.Request) {
 	var input MatchPlayInfo
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if !validateYear(input.Year) {
+		http.Error(w, "Malformed year", http.StatusBadRequest)
 		return
 	}
 
