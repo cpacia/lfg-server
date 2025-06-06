@@ -72,7 +72,7 @@ func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    tokenStr,
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 		Path:     "/",
 	})
 	w.WriteHeader(http.StatusOK)
