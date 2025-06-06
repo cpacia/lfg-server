@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -164,9 +165,16 @@ func initDatabase() (*gorm.DB, string, error) {
 		homeDir = os.Getenv("HOME")
 	}
 
+	dir, _ := os.Getwd()
+	fmt.Println("****", dir)
+
 	homeDir = "./"
 
 	dataDirPath := path.Join(homeDir, dataDir)
+	_, err = os.Stat(dataDirPath)
+	if os.IsNotExist(err) {
+		fmt.Println("Directory does not exist.")
+	}
 
 	err = os.MkdirAll(path.Join(dataDirPath, imageDirName), os.ModePerm)
 	if err != nil {
