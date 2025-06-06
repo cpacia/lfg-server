@@ -71,7 +71,7 @@ func (s *Server) POSTLoginHandler(w http.ResponseWriter, r *http.Request) {
 		Name:     "auth_token",
 		Value:    tokenStr,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   !s.devMode,
 		SameSite: http.SameSiteNoneMode,
 		Path:     "/",
 	})
