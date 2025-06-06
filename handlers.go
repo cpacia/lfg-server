@@ -663,6 +663,7 @@ func (s *Server) GETEventThumbnail(w http.ResponseWriter, r *http.Request) {
 	file.Seek(0, io.SeekStart)
 
 	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=2592000")
 	w.WriteHeader(http.StatusOK)
 	io.Copy(w, file)
 }
