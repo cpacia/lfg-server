@@ -90,7 +90,7 @@ func (s *Server) POSTLogoutHandler(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   !s.devMode,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 		Expires:  time.Unix(0, 0), // Expire immediately
 		MaxAge:   -1,              // Force deletion
 	})
