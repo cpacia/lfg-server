@@ -364,7 +364,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		// The first rows have a different format than the rest.
 		matchNum := 0
 		var nextRows []*goquery.Selection
-		for i := 0; i < len(dataRows); i += 2 {
+		for i := 0; i+1 < len(dataRows); i += 2 {
 			player1 := dataRows[i].
 				Find("td").Eq(1).     // second <td>
 				Find("span").First(). // first <span> inside it
@@ -416,10 +416,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 			nextRows = make([]*goquery.Selection, 0, len(rowsCopy)/2)
 
 			matchNum = 0
-			for i := 0; i < len(rowsCopy); i += 2 {
-				if len(rowsCopy)-1 < i+1 {
-					continue
-				}
+			for i := 0; i+1 < len(rowsCopy); i += 2 {
 				player1 := rowsCopy[i].
 					Find("td").Eq(3 + n). // fourth <td>
 					Text()
@@ -432,7 +429,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 					Find("td").Eq(5 + n). // fourth <td>
 					Text()
 
-				score := dataRows[i+1].
+				score := rowsCopy[i+1].
 					Find("td").Eq(5 + n). // second <td>
 					Find("a").First().    // first <span> inside it
 					Text()
