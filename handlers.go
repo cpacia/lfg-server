@@ -376,6 +376,11 @@ func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if event.Name == "" {
+		http.Error(w, "Event name must be set", http.StatusBadRequest)
+		return
+	}
+
 	// Create first to get eventID
 	result := s.db.Create(&event)
 	if result.Error != nil {
