@@ -21,7 +21,7 @@ import (
 )
 
 func basicSanitize(input string) string {
-	reg := regexp.MustCompile(`[^a-z0-9\-]+`)
+	reg := regexp.MustCompile(`[^a-zA-Z0-9 \-]+`)
 	safeSlug := reg.ReplaceAllString(input, "")
 
 	// Ensure no leading/trailing dashes

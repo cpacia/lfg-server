@@ -70,7 +70,7 @@ func (e *Event) BeforeCreate(tx *gorm.DB) (err error) {
 	name = strings.ReplaceAll(name, " ", "-")
 
 	// Remove all non-alphanumeric/dash characters
-	safeSlug := basicSanitize(name)
+	safeSlug := basicSanitize(strings.ToLower(strings.ReplaceAll(name, " ", "")))
 
 	// Set the ID
 	e.EventID = fmt.Sprintf("%d-%s", year, safeSlug)
