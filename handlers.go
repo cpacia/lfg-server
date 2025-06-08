@@ -261,7 +261,6 @@ func (s *Server) GETStandingsUrls(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=2592000")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(dbStandings)
 }
@@ -635,7 +634,6 @@ func (s *Server) GETEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=2592000")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(event)
 }
@@ -749,7 +747,6 @@ func (s *Server) GETEvents(w http.ResponseWriter, r *http.Request) {
 		"events":          eventMap[targetYear],
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=2592000")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -957,7 +954,6 @@ func (s *Server) GETDisabledGolfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=2592000")
 	json.NewEncoder(w).Encode(&golfers)
 }
 
@@ -1009,7 +1005,6 @@ func (s *Server) GETColonyCupInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=2592000")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(infos)
 }
@@ -1269,7 +1264,6 @@ func (s *Server) GETMatchPlayResults(w http.ResponseWriter, r *http.Request) {
 		"results":         matches,
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
