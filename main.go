@@ -210,6 +210,8 @@ func initDatabase(dataDirOpt string) (*gorm.DB, string, error) {
 		}
 	}
 
+	db.Unscoped().Where("1 = 1").Delete(&DisabledGolfer{})
+
 	return db, dataDirPath, nil
 }
 
