@@ -210,6 +210,8 @@ func initDatabase(dataDirOpt string) (*gorm.DB, string, error) {
 		}
 	}
 
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&DisabledGolfer{})
+
 	return db, dataDirPath, nil
 }
 
