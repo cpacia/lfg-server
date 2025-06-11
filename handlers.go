@@ -654,14 +654,13 @@ func (s *Server) GETEventThumbnail(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
 	if event.Thumbnail == "" {
 		http.Error(w, "Thumbnail not set", http.StatusNotFound)
 		return
 	}
 
 	path := filepath.Join(s.imageDir, event.Thumbnail)
-	file, err := os.Open(path)
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "Thumbnail file not found", http.StatusNotFound)
@@ -670,20 +669,21 @@ func (s *Server) GETEventThumbnail(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	defer file.Close()
+	defer f.Close()
 
-	// Detect content type
-	buf := make([]byte, 512)
-	n, _ := file.Read(buf)
-	contentType := http.DetectContentType(buf[:n])
+	// Stat the file so we can get its mod-time.
+	fi, err := f.Stat()
+	if err != nil {
+		http.Error(w, "Error stating thumbnail", http.StatusInternalServerError)
+		return
+	}
 
-	// Reset reader to beginning
-	file.Seek(0, io.SeekStart)
-
-	w.Header().Set("Content-Type", contentType)
+	// Set your desired cache policy:
 	w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=2592000")
-	w.WriteHeader(http.StatusOK)
-	io.Copy(w, file)
+
+	// Let http.ServeContent detect content-type, emit Last-Modified,
+	// honor If-Modified-Since → 304, and stream bytes.
+	http.ServeContent(w, r, fi.Name(), fi.ModTime(), f)
 }
 
 func (s *Server) GETEvents(w http.ResponseWriter, r *http.Request) {
