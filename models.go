@@ -178,6 +178,11 @@ type MatchPlayMatch struct {
 	MatchNum int    `json:"matchNum"` // Optional: for ordering within round
 }
 
+type MatchPlayPlayer struct {
+	Player   string `json:"player" gorm:"uniqueIndex"`
+	Handicap string `json:"handicap"`
+}
+
 type ColonyCupInfo struct {
 	gorm.Model
 	Year        string         `json:"year" gorm:"uniqueIndex"`

@@ -146,6 +146,10 @@ func main() {
 	r.Delete("/api/match-play", authMiddleware(s.DELETEMatchPlayInfo))
 	r.Post("/api/refresh-match-play-bracket", authMiddleware(s.POSTRefreshMatchPlayBracket))
 	r.Get("/api/match-play/results", s.GETMatchPlayResults)
+	r.Post("/api/match-play/player", s.POSTMatchPlayPlayer)
+	r.Put("/api/match-play/player", s.PUTMatchPlayPlayer)
+	r.Delete("/api/match-play/player", s.DELETEMatchPlayPlayer)
+	r.Get("/api/match-play/players", s.GETMatchPlayPlayers)
 
 	r.Get("/api/current-year", s.GETCurrentYear)
 
@@ -222,6 +226,7 @@ func applyMigrations(db *gorm.DB) error {
 		&WGRRank{},
 		&MatchPlayInfo{},
 		&MatchPlayMatch{},
+		&MatchPlayPlayer{},
 		&ColonyCupInfo{},
 		&DisabledGolfer{},
 		&NetResult{},

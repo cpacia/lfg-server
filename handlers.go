@@ -1268,6 +1268,97 @@ func (s *Server) GETMatchPlayResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (s *Server) GETMatchPlayPlayers(w http.ResponseWriter, r *http.Request) {
+	var players []MatchPlayPlayer
+	if err := s.db.Find(&players).Error; err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(players)
+}
+
+func (s *Server) POSTMatchPlayPlayer(w http.ResponseWriter, r *http.Request) {
+	var player MatchPlayPlayer
+	if err := json.NewDecoder(r.Body).Decode(&player); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if player.Player == "" || player.Handicap == "" {
+		http.Error(w, "Missing player or handicap", http.StatusBadRequest)
+		return
+	}
+	player.Player = basicSanitize(player.Player)
+
+	if err := s.db.Create(&player).Error; err != nil {
+		http.Error(w, "Database insert error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(player)
+}
+
+func (s *Server) PUTMatchPlayPlayer(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "Missing ID", http.StatusBadRequest)
+		return
+	}
+
+	var input MatchPlayPlayer
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	var existing MatchPlayPlayer
+	if err := s.db.First(&existing, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Player not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	existing.Player = input.Player
+	existing.Handicap = input.Handicap
+
+	if err := s.db.Save(&existing).Error; err != nil {
+		http.Error(w, "Update failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(existing)
+}
+
+func (s *Server) DELETEMatchPlayPlayer(w http.ResponseWriter, r *http.Request) {
+	var req MatchPlayPlayer
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Player == "" {
+		http.Error(w, "Missing player name", http.StatusBadRequest)
+		return
+	}
+
+	// Hard‐delete all rows matching the given player name
+	if err := s.db.
+		Where("player = ?", req.Player).
+		Delete(&MatchPlayPlayer{}).
+		Error; err != nil {
+		http.Error(w, "Delete failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) GETDataDirectory(w http.ResponseWriter, r *http.Request) {
 	directoryToZip := s.dataDir
 
