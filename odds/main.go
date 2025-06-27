@@ -23,10 +23,11 @@ type Player struct {
 
 // --------- Parameters (flags) ---------
 var (
-	sims         = flag.Int("sims", 50000, "number of Monte-Carlo iterations")
-	urlFlag      = flag.String("url", "", "leaderboard URL, e.g. https://…/leaderboard.htm")
-	pointsWeight = flag.Float64("wLeague", 0.40, "weight on league form (0-1)")
-	decay        = flag.Float64("decay", 0.90, "exponential decay for recent rounds (0-1)")
+	sims              = flag.Int("sims", 50000, "number of Monte-Carlo iterations")
+	urlFlag           = flag.String("url", "", "leaderboard URL, e.g. https://…/leaderboard.htm")
+	pointsWeight      = flag.Float64("wLeague", 0.40, "weight on league form (0-1)")
+	decay             = flag.Float64("decay", 0.90, "exponential decay for recent rounds (0-1)")
+	handicapAllowance = flag.Float64("allowance", 0.90, "handicap allowance (0-1)")
 )
 
 // --------- Helpers ---------
@@ -109,7 +110,7 @@ type Result struct {
 // --------- Core logic ---------
 
 // MonteCarloOdds with Laplace smoothing and points shrinkage.
-func CalculateOdds(players []*Player, wPts, decay float64, sims int) []Result {
+func CalculateOdds(players []*Player, wPts, decay, handicapAllowance float64, sims int) []Result {
 	const (
 		minSD = 1.5 // strokes – floor for volatility
 		tau   = 3.0 // shrinkage strength for PointsPerEvent
@@ -151,11 +152,11 @@ func CalculateOdds(players []*Player, wPts, decay float64, sims int) []Result {
 	ps := make([]stats, len(pool))
 
 	for i, p := range pool {
-		idx := float64(p.HandicapIndex)
+		idxAdj := handicapAllowance * float64(p.HandicapIndex)
 
 		net := make([]float64, len(p.Differentials))
 		for k, d := range p.Differentials {
-			net[k] = float64(d) - idx
+			net[k] = float64(d) - idxAdj
 		}
 
 		mu := expAvg(net, decay)
@@ -234,7 +235,7 @@ func main() {
 		log.Fatalf("please supply -url or pipe player JSON to stdin")
 	}
 
-	results := CalculateOdds(players, *pointsWeight, *decay, *sims)
+	results := CalculateOdds(players, *pointsWeight, *decay, *handicapAllowance, *sims)
 
 	fmt.Printf("%-12s %6s %8s\n", "Player", "Prob%", "Odds")
 	for _, r := range results {
