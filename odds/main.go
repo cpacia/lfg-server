@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"os"
 	"sort"
+	"time"
 )
 
 // --------- Input model ---------
@@ -21,10 +23,10 @@ type Player struct {
 
 // --------- Parameters (flags) ---------
 var (
+	sims         = flag.Int("sims", 50000, "number of Monte-Carlo iterations")
 	urlFlag      = flag.String("url", "", "leaderboard URL, e.g. https://…/leaderboard.htm")
-	recWeight    = flag.Float64("wRecency", 0.60, "weight on recent form (0-1)")
 	pointsWeight = flag.Float64("wLeague", 0.40, "weight on league form (0-1)")
-	decay        = flag.Float64("decay", 0.90, "exponential decay for recent rounds (0-1)")
+	decay        = flag.Float64("decay", 0.95, "exponential decay for recent rounds (0-1)")
 )
 
 // --------- Helpers ---------
@@ -106,66 +108,89 @@ type Result struct {
 
 // --------- Core logic ---------
 
-func CalculateOdds(players []*Player, recWeight, pointsWeight, decay float64) []Result {
+// MonteCarloOdds with Laplace smoothing and points shrinkage.
+func CalculateOdds(players []*Player, wPts, decay float64, sims int) []Result {
+	const (
+		minSD = 1.5 // strokes – floor for volatility
+		tau   = 3.0 // shrinkage strength for PointsPerEvent
+		alpha = 1   // Laplace pseudocount
+	)
+	// ---------- pool players with a handicap ----------
 	var pool []*Player
 	for _, p := range players {
-		if p.HandicapIndex == 0 {
-			continue // skip – insufficient data
+		if p.HandicapIndex != 0 {
+			pool = append(pool, p)
 		}
-		pool = append(pool, p)
 	}
 	if len(pool) == 0 {
-		return nil // nothing to rate
+		return nil
 	}
 
-	n := len(pool)
-	recent := make([]float64, n)
-	points := make([]float64, n)
+	// ---------- compute field mean PPE (for shrink) ----------
+	var sumPts, cnt float64
+	for _, p := range pool {
+		if p.EventsPlayed > 0 {
+			sumPts += float64(p.PointsPerEvent)
+			cnt++
+		}
+	}
+	meanPPE := 0.0
+	if cnt > 0 {
+		meanPPE = sumPts / cnt
+	}
+
+	// ---------- per-player stats ----------
+	type stats struct{ mu, sd float64 }
+	ps := make([]stats, len(pool))
 
 	for i, p := range pool {
-
-		// Estimate or use provided handicap index
 		idx := float64(p.HandicapIndex)
-		if idx == 0 {
-			idx = estimateIndex(p.Differentials)
+
+		net := make([]float64, len(p.Differentials))
+		for k, d := range p.Differentials {
+			net[k] = float64(d) - idx
 		}
 
-		// Calculate net differentials (d - index)
-		netDiffs := make([]float64, len(p.Differentials))
-		for j, d := range p.Differentials {
-			netDiffs[j] = float64(d) - idx
+		mu := expAvg(net, decay)
+		_, sd := meanStd(net)
+		if sd < minSD {
+			sd = minSD
 		}
 
-		// Recency-weighted average of net performance
-		recent[i] = expAvg(netDiffs, decay)
-
-		// Invert points: higher points = better player = lower score
-		points[i] = -float64(p.PointsPerEvent)
+		// --- shrink PointsPerEvent toward mean ---
+		if p.EventsPlayed > 0 {
+			n := float64(p.EventsPlayed)
+			shrunk := (n/(n+tau))*float64(p.PointsPerEvent) + (tau/(n+tau))*meanPPE
+			mu += wPts * (-shrunk)
+		}
+		ps[i] = stats{mu: mu, sd: sd}
 	}
 
-	// Z-score normalize
-	meanR, sdR := meanStd(recent)
-	meanP, sdP := meanStd(points)
+	// ---------- Monte-Carlo ----------
+	winCnt := make([]int, len(pool))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	z := make([]float64, n)
-	for i := 0; i < n; i++ {
-		zRec := (recent[i] - meanR) / sdR
-		zPts := (points[i] - meanP) / sdP
-		z[i] = recWeight*zRec + pointsWeight*zPts
+	for n := 0; n < sims; n++ {
+		best := math.MaxFloat64
+		winner := -1
+
+		for i, st := range ps {
+			score := rng.NormFloat64()*st.sd + st.mu
+			if score < best {
+				best, winner = score, i
+			} else if score == best && rng.Intn(2) == 0 { // coin-flip tie
+				winner = i
+			}
+		}
+		winCnt[winner]++
 	}
 
-	// Softmax to convert to probabilities
-	expVals := make([]float64, n)
-	var sumExp float64
-	for i, v := range z {
-		expVals[i] = math.Exp(-v)
-		sumExp += expVals[i]
-	}
+	// ---------- convert to probabilities with Laplace smoothing ----------
+	results := make([]Result, len(pool))
+	total := float64(sims + alpha*len(pool))
 
-	// Final output
-	results := make([]Result, n)
 	for i, p := range pool {
-		prob := expVals[i] / sumExp
+		prob := float64(winCnt[i]+alpha) / total
 		results[i] = Result{
 			Name:      p.Name,
 			Prob:      prob,
@@ -201,7 +226,7 @@ func main() {
 		log.Fatalf("please supply -url or pipe player JSON to stdin")
 	}
 
-	results := CalculateOdds(players, *recWeight, *pointsWeight, *decay)
+	results := CalculateOdds(players, *pointsWeight, *decay, *sims)
 
 	fmt.Printf("%-12s %6s %8s\n", "Player", "Prob%", "Odds")
 	for _, r := range results {
