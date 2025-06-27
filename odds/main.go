@@ -26,7 +26,7 @@ var (
 	sims         = flag.Int("sims", 50000, "number of Monte-Carlo iterations")
 	urlFlag      = flag.String("url", "", "leaderboard URL, e.g. https://…/leaderboard.htm")
 	pointsWeight = flag.Float64("wLeague", 0.40, "weight on league form (0-1)")
-	decay        = flag.Float64("decay", 0.95, "exponential decay for recent rounds (0-1)")
+	decay        = flag.Float64("decay", 0.90, "exponential decay for recent rounds (0-1)")
 )
 
 // --------- Helpers ---------
@@ -127,16 +127,23 @@ func CalculateOdds(players []*Player, wPts, decay float64, sims int) []Result {
 	}
 
 	// ---------- compute field mean PPE (for shrink) ----------
-	var sumPts, cnt float64
+	var sumPts, sumSq float64
+	var cnt float64
 	for _, p := range pool {
 		if p.EventsPlayed > 0 {
-			sumPts += float64(p.PointsPerEvent)
+			v := float64(p.PointsPerEvent)
+			sumPts += v
+			sumSq += v * v
 			cnt++
 		}
 	}
-	meanPPE := 0.0
+	meanPPE, sdPPE := 0.0, 1.0
 	if cnt > 0 {
 		meanPPE = sumPts / cnt
+		varVar := (sumSq/cnt - meanPPE*meanPPE)
+		if varVar > 0 {
+			sdPPE = math.Sqrt(varVar)
+		}
 	}
 
 	// ---------- per-player stats ----------
@@ -161,7 +168,8 @@ func CalculateOdds(players []*Player, wPts, decay float64, sims int) []Result {
 		if p.EventsPlayed > 0 {
 			n := float64(p.EventsPlayed)
 			shrunk := (n/(n+tau))*float64(p.PointsPerEvent) + (tau/(n+tau))*meanPPE
-			mu += wPts * (-shrunk)
+			zPts := (shrunk - meanPPE) / sdPPE
+			mu += wPts * (-zPts) // strokes per σ of league form
 		}
 		ps[i] = stats{mu: mu, sd: sd}
 	}
