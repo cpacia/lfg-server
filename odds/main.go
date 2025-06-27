@@ -68,15 +68,19 @@ func probToMoneyline(p float64) int {
 	if p <= 0 || p >= 1 {
 		return 0
 	}
+
 	if p >= 0.5 {
-		raw := -p / (1 - p) * 100
-		return int(math.Round(raw/10)) * 10
+		// favourite: negative number, round to nearest 10
+		raw := 100 * p / (1 - p)
+		return -int(math.Round(raw/10)) * 10
 	}
-	raw := (1 - p) / p * 100
+
+	// underdog: positive number
+	raw := 100 * (1 - p) / p
 	if raw < 200 {
-		return int(math.Ceil(raw/10)) * 10
+		return int(math.Ceil(raw/10)) * 10 // finer grid for short dogs
 	}
-	return int(math.Ceil(raw/25)) * 25
+	return int(math.Ceil(raw/25)) * 25 // coarser beyond +200
 }
 
 // --------- Output model ---------
