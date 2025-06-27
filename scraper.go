@@ -472,9 +472,3 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 	}
 	return nil
 }
-
-type Player struct {
-	Differentials  []float32 // First is most recent. No more than 20.
-	EventsPlayed   int
-	PointsPerEvent float32
-}
