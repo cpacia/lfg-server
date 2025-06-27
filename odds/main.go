@@ -247,6 +247,7 @@ func main() {
 
 	fmt.Printf("%-17s %6s %8s | %6s %8s | %7s %8s\n",
 		"Player", "Win%", "WinML", "Top-5%", "5ML", "Top-10%", "10ML")
+	fmt.Println("======================================================================")
 
 	for _, r := range results {
 		fmt.Printf("%-17s %6.2f%% %+7d | %6.2f%% %+7d | %6.2f%% %+7d\n",
