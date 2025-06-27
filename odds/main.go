@@ -47,27 +47,6 @@ func expAvg(diffs []float64, decay float64) float64 {
 	return num / den
 }
 
-// Estimate handicap index using USGA method: best 8 of last 20 × 0.96
-func estimateIndex(diffs []float32) float64 {
-	n := len(diffs)
-	if n == 0 {
-		return 0
-	}
-	m := 8
-	if n < 8 {
-		m = n
-	}
-	sorted := make([]float32, n)
-	copy(sorted, diffs)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-
-	var sum float64
-	for i := 0; i < m; i++ {
-		sum += float64(sorted[i])
-	}
-	return 0.96 * sum / float64(m)
-}
-
 // Compute mean and standard deviation
 func meanStd(vals []float64) (mean, sd float64) {
 	for _, v := range vals {
@@ -119,7 +98,7 @@ func CalculateOdds(players []*Player, wPts, decay, handicapAllowance float64, si
 	// ---------- pool players with a handicap ----------
 	var pool []*Player
 	for _, p := range players {
-		if p.HandicapIndex != 0 {
+		if len(p.Differentials) > 0 {
 			pool = append(pool, p)
 		}
 	}
