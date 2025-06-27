@@ -85,9 +85,13 @@ func probToMoneyline(p float64) int {
 
 // --------- Output model ---------
 type Result struct {
-	Name      string
-	Prob      float64
-	MoneyLine int
+	Name       string
+	ProbWin    float64
+	MoneyWin   int
+	ProbTop5   float64
+	MoneyTop5  int
+	ProbTop10  float64
+	MoneyTop10 int
 }
 
 // --------- Core logic ---------
@@ -159,39 +163,60 @@ func CalculateOdds(players []*Player, wPts, decay, handicapAllowance float64, si
 	}
 
 	// ---------- Monte-Carlo ----------
-	winCnt := make([]int, len(pool))
+	n := len(pool)
+	winCnt := make([]int, n)
+	top5Cnt := make([]int, n)
+	top10Cnt := make([]int, n)
+
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	scores := make([]float64, n)
+	idx := make([]int, n)
 
-	for n := 0; n < sims; n++ {
-		best := math.MaxFloat64
-		winner := -1
-
+	for sim := 0; sim < sims; sim++ {
 		for i, st := range ps {
-			score := rng.NormFloat64()*st.sd + st.mu
-			if score < best {
-				best, winner = score, i
-			} else if score == best && rng.Intn(2) == 0 { // coin-flip tie
-				winner = i
-			}
+			scores[i] = rng.NormFloat64()*st.sd + st.mu
+			idx[i] = i
 		}
-		winCnt[winner]++
+		// sort index slice by score
+		sort.Slice(idx, func(a, b int) bool { return scores[idx[a]] < scores[idx[b]] })
+
+		winCnt[idx[0]]++
+		limit5 := 5
+		if limit5 > n {
+			limit5 = n
+		}
+		limit10 := 10
+		if limit10 > n {
+			limit10 = n
+		}
+
+		for k := 0; k < limit5; k++ {
+			top5Cnt[idx[k]]++
+		}
+		for k := 0; k < limit10; k++ {
+			top10Cnt[idx[k]]++
+		}
 	}
 
-	// ---------- convert to probabilities with Laplace smoothing ----------
-	results := make([]Result, len(pool))
-	total := float64(sims + alpha*len(pool))
-
+	total := float64(sims + alpha*n)
+	res := make([]Result, n)
 	for i, p := range pool {
-		prob := float64(winCnt[i]+alpha) / total
-		results[i] = Result{
-			Name:      p.Name,
-			Prob:      prob,
-			MoneyLine: probToMoneyline(prob),
+		pw := float64(winCnt[i]+alpha) / total
+		p5 := float64(top5Cnt[i]+alpha) / total
+		p10 := float64(top10Cnt[i]+alpha) / total
+
+		res[i] = Result{
+			Name:       p.Name,
+			ProbWin:    pw,
+			MoneyWin:   probToMoneyline(pw),
+			ProbTop5:   p5,
+			MoneyTop5:  probToMoneyline(p5),
+			ProbTop10:  p10,
+			MoneyTop10: probToMoneyline(p10),
 		}
 	}
-
-	sort.Slice(results, func(i, j int) bool { return results[i].Prob > results[j].Prob })
-	return results
+	sort.Slice(res, func(i, j int) bool { return res[i].ProbWin > res[j].ProbWin })
+	return res
 }
 
 // --------- Main entry point ---------
@@ -220,13 +245,15 @@ func main() {
 
 	results := CalculateOdds(players, *pointsWeight, *decay, *handicapAllowance, *sims)
 
-	fmt.Printf("%-12s %6s %8s\n", "Player", "Prob%", "Odds")
+	fmt.Printf("%-17s %6s %8s | %6s %8s | %7s %8s\n",
+		"Player", "Win%", "WinML", "Top-5%", "5ML", "Top-10%", "10ML")
+
 	for _, r := range results {
-		sign := "+"
-		if r.MoneyLine < 0 {
-			sign = ""
-		}
-		fmt.Printf("%-12s %5.2f%%  %s%d\n", r.Name, r.Prob*100, sign, r.MoneyLine)
+		fmt.Printf("%-17s %6.2f%% %+7d | %6.2f%% %+7d | %6.2f%% %+7d\n",
+			r.Name,
+			r.ProbWin*100, r.MoneyWin,
+			r.ProbTop5*100, r.MoneyTop5,
+			r.ProbTop10*100, r.MoneyTop10)
 	}
 }
 
