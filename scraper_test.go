@@ -427,3 +427,142 @@ func Test_updateMatchPlayResults(t *testing.T) {
 		log.Fatal(err)
 	}
 }*/
+
+/*type player struct {
+	name      string
+	scorecard string
+	scores    [18]int
+	score     int
+	through   int
+}
+
+func TestEvent_BeforeCreate(t *testing.T) {
+
+	c := colly.NewCollector()
+	c.Async = true
+	url := `https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc255/contest/1/leaderboard.htm`
+
+	var players []*player
+
+	c.OnHTML("table.table-sortable tbody#lbBody > tr", func(e *colly.HTMLElement) {
+		rank := strings.TrimSpace(e.ChildText("td:nth-child(1)"))
+		name := strings.TrimSpace(e.ChildText("td:nth-child(2) a span.d-none.d-md-inline"))
+
+		playerID := strings.TrimPrefix(e.Attr("id"), "tr_")
+
+		if name == "" || rank == "" {
+			// Skip header/invalid rows
+			return
+		}
+
+		base := strings.TrimSuffix(url, "leaderboard.htm")
+		scorecardURL := fmt.Sprintf("%scontestant/%s/scorecard.htm", base, playerID)
+
+		players = append(players, &player{
+			name:      name,
+			scorecard: scorecardURL,
+		})
+	})
+
+	if err := c.Visit(url); err != nil {
+		t.Fatal(err)
+	}
+
+	c.Wait()
+
+	for _, p := range players {
+
+		var netScores []int
+		c.OnHTML("tr.scores.bg-enhanced-net", func(e *colly.HTMLElement) {
+
+			// Guard: only use rows whose first cell is literally “Net Score”
+			if strings.TrimSpace(e.ChildText("td:first-child")) != "Net Score" {
+				return
+			}
+
+			// Loop over every following <td>. The first is index 0 here, so
+			// td:nth-child(n+2) skips the “Net Score” label itself.
+			e.ForEach("td:nth-child(n+2)", func(i int, el *colly.HTMLElement) {
+
+				// The BlueGolf table has extra “Out”, “In”, “Total” cells after
+				// hole 18; stop after we’ve collected the 18 numbers we need.
+				if len(netScores) >= 19 {
+					return
+				}
+
+				text := strings.TrimSpace(el.Text) // "4" or "4." (dot icon)
+				text = strings.Trim(text, ".")     // drop trailing “.” if present
+
+				if v, err := strconv.Atoi(text); err == nil {
+					netScores = append(netScores, v)
+				}
+			})
+		})
+
+		if err := c.Visit(p.scorecard); err != nil {
+			t.Fatal(err)
+		}
+
+		c.Wait()
+		if len(netScores) == 0 {
+			break
+		}
+		copy(p.scores[0:9], netScores[0:9])
+		copy(p.scores[9:18], netScores[10:])
+	}
+
+	playerMap := make(map[string]*player)
+	for _, p := range players {
+		playerMap[p.name] = p
+	}
+
+	groups := [][]string{
+		{"Dan Moriarty", "Rob  Tokanel", "Jim Tokanel"},
+		{"Beth Castantini", "Connor Shaw", "Scott Benedict"},
+		{"Andrew Paul", "Ricky Dichard", "David Christian", "Ben Bourque"},
+		{"John Theriault", "James Wirbal", "Chris Pacia", "Noah Dubois"},
+		{"Chris Roussin", "Justin Rosamilio", "Pat Blair", "Marc Graham"},
+		{"Benjamin Friend", "Joseph Gagne", "Brian Ganci", "John Morin"},
+		{"Curt Dutilley", "Garrett Robinson", "Scott Smith", "Robert Wenrich"},
+	}
+	par := [18]int{5, 4, 3, 5, 4, 4, 4, 3, 4, 4, 3, 4, 4, 3, 4, 4, 5, 4}
+
+	for i := 1; i <= 18+7; i++ {
+		for x := 0; x < 7; x++ {
+			for _, name := range groups[x] {
+				if i-x < 1 || i-x > 18 {
+					continue
+				}
+				score := playerMap[name].scores[i-x-1]
+				playerMap[name].score += score - par[i-x-1]
+				playerMap[name].through = i - x
+				//fmt.Println(name, score, i-x, playerMap[name].score, playerMap[name].scores)
+			}
+		}
+
+		sort.Slice(players, func(i, j int) bool {
+			return players[i].score < players[j].score
+		})
+
+		for _, p := range players {
+			if p.through > 0 {
+				out := fmt.Sprintf("%s, ", p.name)
+				if p.score == 0 {
+					out += "E, "
+				} else if p.score > 0 {
+					out += fmt.Sprintf("+%d, ", p.score)
+				} else {
+					out += fmt.Sprintf("%d, ", p.score)
+				}
+				if p.through == 18 {
+					out += "F"
+				} else {
+					out += fmt.Sprintf("%d", p.through)
+				}
+				fmt.Println(out)
+			}
+		}
+		fmt.Println("***********************")
+		fmt.Println()
+	}
+}*/
