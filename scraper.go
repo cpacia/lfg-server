@@ -42,6 +42,7 @@ func updateStandings(db *gorm.DB, s *Standings) error {
 }
 
 func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl string) error {
+	var rerr error
 	if netUrl != "" {
 		err := updateResultsGeneric(db, netUrl, eventID, func(eventID, rank, player, total, strokes, points, scorecardUrl string) *NetResult {
 			return &NetResult{
@@ -55,7 +56,7 @@ func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, w
 			}
 		})
 		if err != nil {
-			return err
+			rerr = err
 		}
 	}
 	if grossUrl != "" {
@@ -70,13 +71,13 @@ func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, w
 			}
 		})
 		if err != nil {
-			return err
+			rerr = err
 		}
 	}
 	if skinsUrl != "" {
 		err := updateSkinsResults(db, skinsUrl, eventID)
 		if err != nil {
-			return err
+			rerr = err
 		}
 	}
 	if teamsUrl != "" {
@@ -94,7 +95,7 @@ func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, w
 			}
 		})
 		if err != nil {
-			return err
+			rerr = err
 		}
 	}
 	if wgrUrl != "" {
@@ -110,10 +111,10 @@ func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, w
 			}
 		})
 		if err != nil {
-			return err
+			rerr = err
 		}
 	}
-	return nil
+	return rerr
 }
 
 func updateStandingsGeneric[T any](db *gorm.DB, url string, year string, newRow func(string, string, string, string, string) T) error {
@@ -175,6 +176,14 @@ func updateResultsGeneric[T any](db *gorm.DB, url string, eventID string, newRow
 		points := strings.TrimSpace(e.ChildText("td:nth-child(6)"))
 		playerID := strings.TrimPrefix(e.Attr("id"), "tr_")
 
+		// Check if this is multi-round tournament
+		if player == "" {
+			player = strings.TrimSpace(e.ChildText("td:nth-child(3) a span.d-none.d-md-inline"))
+			total = strings.TrimSpace(e.ChildText("td:nth-child(4)"))
+			strokes = strings.TrimSpace(e.ChildText("td:nth-child(9)"))
+			points = strings.TrimSpace(e.ChildText("td:nth-child(10)"))
+		}
+
 		if player == "" || rank == "" {
 			// Skip header/invalid rows
 			return
@@ -227,6 +236,11 @@ func updateSkinsResults(db *gorm.DB, url string, eventID string) error {
 		skins := strings.TrimSpace(e.ChildText("td:nth-child(4)"))
 		// ID is in the row’s id attribute (“tr_{playerID}”)
 		playerID := strings.TrimPrefix(e.Attr("id"), "tr_")
+
+		skinsMultiRound := strings.TrimSpace(e.ChildText("td:nth-child(7)"))
+		if skinsMultiRound != "" {
+			skins = skinsMultiRound
+		}
 
 		if player == "" || rank == "" {
 			return
