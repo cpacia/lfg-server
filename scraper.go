@@ -5,7 +5,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
 	"gorm.io/gorm"
-	"sort"
 	"strings"
 )
 
@@ -353,12 +352,6 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 			roundNames[j+1] = label
 		}
 
-		var cols []int
-		for col := range roundNames {
-			cols = append(cols, col)
-		}
-		sort.Ints(cols)
-
 		// 3) Build dataRows = all <tr> that have ≥1 <td>
 		// Every two rows has data we want with a separator row in between.
 		var dataRows []*goquery.Selection
@@ -374,10 +367,8 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 			return
 		}
 
-		// Iterate over the dataRows to get the first round match ups.
-		// The first rows have a different format than the rest.
+		// Round 1
 		matchNum := 0
-		var nextRows []*goquery.Selection
 		for i := 0; i+1 < len(dataRows); i += 2 {
 			player1 := dataRows[i].
 				Find("td").Eq(1).     // second <td>
@@ -413,61 +404,165 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 			}
 			matches = append(matches, match)
 			matchNum++
-
-			nextRows = append(nextRows, dataRows[i])
 		}
 
-		// Now we're going to iterate over the rest of the columns.
-		// The next round data should be found as follows:
-		// Round2: indexes 0, 2, 4, 6, 8, 10, 12, 14
-		// Round3: indexes 0, 4, 8, 12
-		// Round4: indexes 0, 8
-		// etc
-		n := 0
-		for _, col := range cols[1:] {
-			rowsCopy := make([]*goquery.Selection, len(nextRows))
-			copy(rowsCopy, nextRows)
-			nextRows = make([]*goquery.Selection, 0, len(rowsCopy)/2)
+		// Round 2
+		matchNum = 0
+		for i := 0; i+2 < len(dataRows); i += 4 {
+			player1 := dataRows[i].
+				Find("td").Eq(3). // fourth <td>
+				Text()
 
-			matchNum = 0
-			for i := 0; i+1 < len(rowsCopy); i += 2 {
-				player1 := rowsCopy[i].
-					Find("td").Eq(3 + n). // fourth <td>
-					Text()
+			player2 := dataRows[i+2].
+				Find("td").Eq(3). // fourth <td>
+				Text()
 
-				player2 := rowsCopy[i+1].
-					Find("td").Eq(3 + n). // fourth <td>
-					Text()
+			winner := dataRows[i+1].
+				Find("td").Eq(5). // fourth <td>
+				Text()
 
-				// FIXME: The winner of round two is found in datarows[i+1] not rowscopy.
-				// This hack might work for round two winners but probably not other rounds.
-				winner := dataRows[i+1].
-					Find("td").Eq(5 + n). // fourth <td>
-					Text()
+			score := dataRows[i+2].
+				Find("td").Eq(5).  // second <td>
+				Find("a").First(). // first <span> inside it
+				Text()
 
-				score := rowsCopy[i+1].
-					Find("td").Eq(5 + n). // second <td>
-					Find("a").First().    // first <span> inside it
-					Text()
-
-				if score == "Tied" {
-					score = ""
-				}
-				score = strings.TrimPrefix(score, " ")
-
-				matches = append(matches, &MatchPlayMatch{
-					Year:     year,
-					Round:    roundNames[col],
-					Player1:  player1,
-					Player2:  player2,
-					Winner:   winner,
-					Score:    score,
-					MatchNum: matchNum,
-				})
-				nextRows = append(nextRows, rowsCopy[i])
-				matchNum++
+			if score == "Tied" {
+				score = ""
 			}
-			n += 2
+			score = strings.TrimPrefix(score, " ")
+
+			matches = append(matches, &MatchPlayMatch{
+				Year:     year,
+				Round:    roundNames[2],
+				Player1:  player1,
+				Player2:  player2,
+				Winner:   winner,
+				Score:    score,
+				MatchNum: matchNum,
+			})
+			matchNum++
+		}
+
+		// Quaterfinals
+		matchNum = 0
+		for i := 1; i+2 < len(dataRows); i += 8 {
+			player1 := dataRows[i].
+				Find("td").Eq(5). // fourth <td>
+				Text()
+
+			player2 := dataRows[i+4].
+				Find("td").Eq(5). // fourth <td>
+				Text()
+
+			// FIXME: figure out correct index when more data is populated
+			winner := dataRows[i+1].
+				Find("td").Eq(7). // fourth <td>
+				Text()
+
+			// FIXME: figure out correct index when more data is populated
+			score := dataRows[i+2].
+				Find("td").Eq(5).  // second <td>
+				Find("a").First(). // first <span> inside it
+				Text()
+
+			if score == "Tied" {
+				score = ""
+			}
+			score = strings.TrimPrefix(score, " ")
+
+			matches = append(matches, &MatchPlayMatch{
+				Year:     year,
+				Round:    roundNames[3],
+				Player1:  player1,
+				Player2:  player2,
+				Winner:   winner,
+				Score:    score,
+				MatchNum: matchNum,
+			})
+			matchNum++
+		}
+
+		// Semifinals
+		matchNum = 0
+		for i := 0; i+2 < len(dataRows); i += 16 {
+			// FIXME: figure out correct index when more data is populated
+			player1 := dataRows[i].
+				Find("td").Eq(7). // fourth <td>
+				Text()
+
+			// FIXME: figure out correct index when more data is populated
+			player2 := dataRows[i+4].
+				Find("td").Eq(7). // fourth <td>
+				Text()
+
+			// FIXME: figure out correct index when more data is populated
+			winner := dataRows[i+1].
+				Find("td").Eq(7). // fourth <td>
+				Text()
+
+			// FIXME: figure out correct index when more data is populated
+			score := dataRows[i+2].
+				Find("td").Eq(7).  // second <td>
+				Find("a").First(). // first <span> inside it
+				Text()
+			fmt.Println(i, player1, player2, winner, score)
+
+			if score == "Tied" {
+				score = ""
+			}
+			score = strings.TrimPrefix(score, " ")
+
+			matches = append(matches, &MatchPlayMatch{
+				Year:     year,
+				Round:    roundNames[4],
+				Player1:  player1,
+				Player2:  player2,
+				Winner:   winner,
+				Score:    score,
+				MatchNum: matchNum,
+			})
+			matchNum++
+		}
+		// Semifinals
+		matchNum = 0
+		for i := 0; i+2 < len(dataRows); i += 32 {
+			// FIXME: figure out correct index when more data is populated
+			player1 := dataRows[i].
+				Find("td").Eq(7). // fourth <td>
+				Text()
+
+			// FIXME: figure out correct index when more data is populated
+			player2 := dataRows[i+4].
+				Find("td").Eq(7). // fourth <td>
+				Text()
+
+			// FIXME: figure out correct index when more data is populated
+			winner := dataRows[i+1].
+				Find("td").Eq(7). // fourth <td>
+				Text()
+
+			// FIXME: figure out correct index when more data is populated
+			score := dataRows[i+2].
+				Find("td").Eq(7).  // second <td>
+				Find("a").First(). // first <span> inside it
+				Text()
+			fmt.Println(i, player1, player2, winner, score)
+
+			if score == "Tied" {
+				score = ""
+			}
+			score = strings.TrimPrefix(score, " ")
+
+			matches = append(matches, &MatchPlayMatch{
+				Year:     year,
+				Round:    roundNames[5],
+				Player1:  player1,
+				Player2:  player2,
+				Winner:   winner,
+				Score:    score,
+				MatchNum: matchNum,
+			})
+			matchNum++
 		}
 	})
 
