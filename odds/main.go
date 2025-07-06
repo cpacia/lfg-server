@@ -23,7 +23,7 @@ type Player struct {
 
 // --------- Parameters (flags) ---------
 var (
-	sims              = flag.Int("sims", 50000, "number of Monte-Carlo iterations")
+	sims              = flag.Int("sims", 1000000, "number of Monte-Carlo iterations")
 	urlFlag           = flag.String("url", "", "leaderboard URL, e.g. https://…/leaderboard.htm")
 	pointsWeight      = flag.Float64("wLeague", 0.40, "weight on league form (0-1)")
 	decay             = flag.Float64("decay", 0.90, "exponential decay for recent rounds (0-1)")

@@ -439,7 +439,9 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 					Find("td").Eq(3 + n). // fourth <td>
 					Text()
 
-				winner := rowsCopy[i].
+				// FIXME: The winner of round two is found in datarows[i+1] not rowscopy.
+				// This hack might work for round two winners but probably not other rounds.
+				winner := dataRows[i+1].
 					Find("td").Eq(5 + n). // fourth <td>
 					Text()
 

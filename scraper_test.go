@@ -399,7 +399,7 @@ func Test_updateMatchPlayResults(t *testing.T) {
 	assert.Equal(t, "S. Dowd", matchPlayMatches[19].Player2)
 
 	assert.Equal(t, "J. Tokanel", matchPlayMatches[20].Player1)
-	assert.Equal(t, "", matchPlayMatches[20].Player2)
+	assert.Equal(t, "B. Ganci", matchPlayMatches[20].Player2)
 
 	for i, m := range matchPlayMatches {
 		fmt.Println("Index: ", i, "Matchnum: ", m.MatchNum, "Year: ", m.Year, "Round: ", m.Round, "Player1: ", m.Player1, "PLayer2: ", m.Player2, "Winner: ", m.Winner, "Score: ", m.Score)
