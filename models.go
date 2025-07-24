@@ -179,6 +179,7 @@ type MatchPlayMatch struct {
 }
 
 type MatchPlayPlayer struct {
+	gorm.Model
 	Player   string `json:"player" gorm:"uniqueIndex"`
 	Handicap string `json:"handicap"`
 }

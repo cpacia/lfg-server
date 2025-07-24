@@ -1302,20 +1302,18 @@ func (s *Server) POSTMatchPlayPlayer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) PUTMatchPlayPlayer(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		http.Error(w, "Missing ID", http.StatusBadRequest)
-		return
-	}
-
 	var input MatchPlayPlayer
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
+	if input.Player == "" {
+		http.Error(w, "Missing player name", http.StatusBadRequest)
+		return
+	}
 
 	var existing MatchPlayPlayer
-	if err := s.db.First(&existing, id).Error; err != nil {
+	if err := s.db.First(&existing, "player = ?", input.Player).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			http.Error(w, "Player not found", http.StatusNotFound)
 		} else {
