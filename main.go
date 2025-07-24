@@ -218,7 +218,6 @@ func initDatabase(dataDirOpt string) (*gorm.DB, string, error) {
 }
 
 func applyMigrations(db *gorm.DB) error {
-	db.Migrator().DropTable(&MatchPlayPlayer{})
 	return db.AutoMigrate(
 		&DBCredentials{},
 		&Event{},
