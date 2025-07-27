@@ -183,6 +183,12 @@ func updateResultsGeneric[T any](db *gorm.DB, url string, eventID string, newRow
 			points = strings.TrimSpace(e.ChildText("td:nth-child(10)"))
 		}
 
+		// This is likely a stableford
+		if strings.HasPrefix(points, "$") {
+			strokes = "-"
+			points = strings.TrimSpace(e.ChildText("td:nth-child(5)"))
+		}
+
 		if player == "" || rank == "" {
 			// Skip header/invalid rows
 			return
