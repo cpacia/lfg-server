@@ -10,13 +10,14 @@ import (
 
 func updateStandings(db *gorm.DB, s *Standings) error {
 	if s.SeasonStandingsUrl != "" {
-		err := updateStandingsGeneric(db, s.SeasonStandingsUrl, s.CalendarYear, func(year, player, rank, events, points string) *SeasonRank {
+		err := updateStandingsGeneric(db, s.SeasonStandingsUrl, s.CalendarYear, func(year, player, rank, events, points, user string) *SeasonRank {
 			return &SeasonRank{
 				Year:   year,
 				Player: player,
 				Rank:   rank,
 				Events: events,
 				Points: points,
+				User:   user,
 			}
 		})
 		if err != nil {
@@ -24,13 +25,14 @@ func updateStandings(db *gorm.DB, s *Standings) error {
 		}
 	}
 	if s.WgrStandingsUrl != "" {
-		err := updateStandingsGeneric(db, s.WgrStandingsUrl, s.CalendarYear, func(year, player, rank, events, points string) *WGRRank {
+		err := updateStandingsGeneric(db, s.WgrStandingsUrl, s.CalendarYear, func(year, player, rank, events, points, user string) *WGRRank {
 			return &WGRRank{
 				Year:   year,
 				Player: player,
 				Rank:   rank,
 				Events: events,
 				Points: points,
+				User:   user,
 			}
 		})
 		if err != nil {
@@ -116,7 +118,7 @@ func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, w
 	return rerr
 }
 
-func updateStandingsGeneric[T any](db *gorm.DB, url string, year string, newRow func(string, string, string, string, string) T) error {
+func updateStandingsGeneric[T any](db *gorm.DB, url string, year string, newRow func(string, string, string, string, string, string) T) error {
 	c := colly.NewCollector()
 	c.Async = true
 
@@ -128,6 +130,7 @@ func updateStandingsGeneric[T any](db *gorm.DB, url string, year string, newRow 
 			return
 		}
 
+		user := strings.TrimSpace(e.Attr("data-user"))
 		rank := strings.TrimSpace(tds.Eq(0).Text())
 		player := strings.TrimSpace(tds.Eq(1).Find(".plr-data a").Text())
 		events := strings.TrimSpace(tds.Eq(2).Text())
@@ -135,7 +138,7 @@ func updateStandingsGeneric[T any](db *gorm.DB, url string, year string, newRow 
 
 		parts := strings.SplitN(points, ".", 2)
 		integerPoints := parts[0]
-		rows = append(rows, newRow(year, player, rank, events, integerPoints))
+		rows = append(rows, newRow(year, player, rank, events, integerPoints, user))
 	})
 
 	if err := c.Visit(url); err != nil {

@@ -198,6 +198,7 @@ type SeasonRank struct {
 	Rank   string `json:"rank"`
 	Events string `json:"events"`
 	Points string `json:"points"`
+	User   string `json:"user"`
 }
 
 type WGRRank struct {
@@ -207,4 +208,5 @@ type WGRRank struct {
 	Rank   string `json:"rank"`
 	Events string `json:"events"`
 	Points string `json:"points"`
+	User   string `json:"user"`
 }

@@ -60,6 +60,9 @@ func Test_updateStandings(t *testing.T) {
 
 	assert.Equal(t, seasonRankings[0].Points, "193")
 	assert.Equal(t, wgrRankings[0].Points, "193")
+
+	assert.Equal(t, seasonRankings[0].User, "croussin")
+	assert.Equal(t, wgrRankings[0].User, "croussin")
 }
 
 func Test_updateFullResults(t *testing.T) {
