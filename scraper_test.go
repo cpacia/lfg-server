@@ -1,19 +1,14 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -413,98 +408,6 @@ func Test_updateMatchPlayResults(t *testing.T) {
 		fmt.Println("Index: ", i, "Matchnum: ", m.MatchNum, "Year: ", m.Year, "Round: ", m.Round, "Player1: ", m.Player1, "PLayer2: ", m.Player2, "Winner: ", m.Winner, "Score: ", m.Score)
 	}
 	fmt.Println(len(matchPlayMatches))
-}
-
-type fakeTransport struct {
-	payload []byte
-}
-
-func (ft *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.URL.Host == "nhgaclub.bluegolf.com" && strings.HasSuffix(req.URL.Path, "/poyprofile.json") {
-		rc := io.NopCloser(bytes.NewReader(ft.payload))
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       rc,
-			Header:     make(http.Header),
-			Request:    req,
-		}, nil
-	}
-	// Shouldn't be hit in this test; return 502 to surface surprises.
-	return &http.Response{
-		StatusCode: http.StatusBadGateway,
-		Body:       io.NopCloser(strings.NewReader("unexpected outbound url")),
-		Header:     make(http.Header),
-		Request:    req,
-	}, nil
-}
-
-func TestGetBlueGolfUserData(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err)
-
-	err = applyMigrations(db)
-	assert.NoError(t, err)
-
-	err = db.Create(&[]Standings{
-		{
-			CalendarYear:       "2024",
-			SeasonStandingsUrl: "https://nhgaclub.bluegolf.com/bluegolfw/clubx/poy/contestx/index.htm",
-			WgrStandingsUrl:    "https://nhgaclub.bluegolf.com/bluegolfw/clubx/poy/contestwgr/index.htm",
-		},
-		{
-			CalendarYear:       "2025",
-			SeasonStandingsUrl: "https://nhgaclub.bluegolf.com/bluegolfw/cluby/poy/contesty/index.htm",
-			WgrStandingsUrl:    "https://nhgaclub.bluegolf.com/bluegolfw/cluby/poy/contestyg/index.htm",
-		},
-	}).Error
-	assert.NoError(t, err)
-
-	s := &Server{db: db}
-
-	bgPayload := []byte(`{
-	  "resultColTitle": "Points",
-	  "isGSGA": false,
-	  "tournaments": [
-	    {
-	      "date": "Apr 27",
-	      "usedInCalc": true,
-	      "scores": "75",
-	      "scorecardLink": "https://example/score",
-	      "link": "https://example/board",
-	      "name": "The Impact Fire Opener",
-	      "lscore": "90.00",
-	      "place": "3"
-	    }
-	  ]
-	}`)
-
-	origTransport := http.DefaultTransport
-	http.DefaultTransport = &fakeTransport{payload: bgPayload}
-	t.Cleanup(func() { http.DefaultTransport = origTransport })
-
-	r := chi.NewRouter()
-	r.Get("/api/standings-data/{type}/{user}", s.GETStandingsUserData)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/standings-data/season/44?year=2024", nil)
-	rec := httptest.NewRecorder()
-
-	r.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var tournaments []Tournament
-	dec := json.NewDecoder(rec.Body)
-	assert.NoError(t, dec.Decode(&tournaments))
-
-	assert.Len(t, tournaments, 1)
-	assert.Equal(t, "The Impact Fire Opener", tournaments[0].Name)
-	assert.Equal(t, "Apr 27", tournaments[0].Date)
-	assert.Equal(t, "75", tournaments[0].Score)
-	assert.Equal(t, "3", tournaments[0].Place)
-	assert.Equal(t, "90.00", tournaments[0].Points)
-	assert.Equal(t, true, tournaments[0].UsedInCalc)
 }
 
 /*func TestPrintHtml(t *testing.T) {

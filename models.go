@@ -89,7 +89,7 @@ type NetResult struct {
 	gorm.Model
 	EventID      string `json:"eventID" gorm:"index"`
 	Rank         string `json:"rank"`
-	Player       string `json:"player"`
+	Player       string `json:"player" gorm:"index"`
 	Total        string `json:"total"`
 	Strokes      string `json:"strokes"`
 	Points       string `json:"points"`
@@ -138,7 +138,7 @@ type WGRResult struct {
 	gorm.Model
 	EventID      string `json:"eventID" gorm:"index"`
 	Rank         string `json:"rank"`
-	Player       string `json:"player"`
+	Player       string `json:"player" gorm:"index"`
 	Total        string `json:"total"`
 	Strokes      string `json:"strokes"`
 	Points       string `json:"points"`
@@ -212,6 +212,18 @@ type WGRRank struct {
 }
 
 type Tournament struct {
+	gorm.Model
+	Year       string `json:"year"`
+	Player     string `json:"player"`
+	Name       string `json:"name"`
+	Date       string `json:"date"`
+	UsedInCalc bool   `json:"usedInCalc"`
+	Score      string `json:"score"`
+	Points     string `json:"points"`
+	Place      string `json:"place"`
+}
+
+type BGTournament struct {
 	Name       string `json:"name"`
 	Date       string `json:"date"`
 	UsedInCalc bool   `json:"usedInCalc"`
@@ -221,5 +233,5 @@ type Tournament struct {
 }
 
 type tournamentsEnvelope struct {
-	Tournaments []Tournament `json:"tournaments"`
+	Tournaments []BGTournament `json:"tournaments"`
 }
