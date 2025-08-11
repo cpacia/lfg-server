@@ -337,6 +337,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	queryUrl := fmt.Sprintf("https://nhgaclub.bluegolf.com/bluegolfw/%s/profile/%s/poyprofile.json?award=%s", club, user, contest)
+	fmt.Println("***", queryUrl)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, queryUrl, nil)
 	if err != nil {
@@ -362,7 +363,6 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 	var env tournamentsEnvelope
 	dec := json.NewDecoder(resp.Body)
 	if err := dec.Decode(&env); err != nil {
-		fmt.Println(err)
 		http.Error(w, "Error querying bluegolf4", http.StatusInternalServerError)
 		return
 	}
