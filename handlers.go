@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1541,29 +1542,91 @@ func parseBlueGolf(raw string) (club, contest string, err error) {
 	return segs[iBlue+1], segs[iPoy+1], nil
 }
 
-// fetchBlueGolfJSON gets the JSON (handling cookies, headers, redirects, and IPv4-only path).
+// fetchBlueGolfJSON fetches BlueGolf JSON with multiple header/transport profiles
+// and detailed diagnostics. It "primes" cookies via primeURL first.
+// Returns tournamentsEnvelope on success (adjust type name if different).
 func fetchBlueGolfJSON(ctx context.Context, queryURL, primeURL string) (*tournamentsEnvelope, error) {
+	ua := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
 	jar, _ := cookiejar.New(nil)
 
-	// Force IPv4 (edges sometimes differ on v6)
+	// Dialer that prefers IPv4; falls back to whatever if needed.
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return dialer.DialContext(ctx, "tcp4", addr)
-		},
-		ForceAttemptHTTP2: true,
+
+	// Log the actual edge IP/port we connect to.
+	logDial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		// Try IPv4 first
+		c, err := dialer.DialContext(ctx, "tcp4", addr)
+		if err != nil {
+			// Fallback to whatever the system chooses
+			c, err = dialer.DialContext(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if ra, ok := c.RemoteAddr().(*net.TCPAddr); ok {
+			log.Printf("[BlueGolf] connect %s -> %s (remote IP: %s)", network, addr, ra.IP.String())
+		}
+		return c, nil
 	}
 
-	client := &http.Client{
-		Timeout:   20 * time.Second,
-		Jar:       jar,
-		Transport: transport,
-		// Show 30x so we can inspect Location
-		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	// HTTP/1.1-only transport
+	transportH1 := &http.Transport{
+		Proxy:             http.ProxyFromEnvironment,
+		DialContext:       logDial,
+		ForceAttemptHTTP2: false,
+		// Disable HTTP/2 entirely
+		TLSNextProto:        map[string]func(string, *tls.Conn) http.RoundTripper{},
+		MaxIdleConns:        10,
+		IdleConnTimeout:     30 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
 	}
 
-	ua := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+	// HTTP/2-capable transport
+	transportH2 := &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
+		DialContext:         logDial,
+		ForceAttemptHTTP2:   true,
+		MaxIdleConns:        10,
+		IdleConnTimeout:     30 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+
+	newClient := func(h2 bool) *http.Client {
+		tr := transportH1
+		if h2 {
+			tr = transportH2
+		}
+		return &http.Client{
+			Timeout:   20 * time.Second,
+			Jar:       jar,
+			Transport: tr,
+			// Do NOT auto-follow so we can log 30x details.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+		}
+	}
+
+	setJSONHeaders := func(req *http.Request, accept string, withXHR, addFetch bool, referer, origin string) {
+		req.Header.Set("User-Agent", ua)
+		req.Header.Set("Accept", accept)
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		if referer != "" {
+			req.Header.Set("Referer", referer)
+		}
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		if withXHR {
+			req.Header.Set("X-Requested-With", "XMLHttpRequest")
+		} else {
+			req.Header.Del("X-Requested-With")
+		}
+		if addFetch {
+			req.Header.Set("Sec-Fetch-Dest", "empty")
+			req.Header.Set("Sec-Fetch-Mode", "cors")
+			req.Header.Set("Sec-Fetch-Site", "same-origin")
+		}
+	}
 
 	// 1) Prime cookies (ignore status; just read to EOF)
 	if primeURL != "" {
@@ -1571,78 +1634,122 @@ func fetchBlueGolfJSON(ctx context.Context, queryURL, primeURL string) (*tournam
 		preq.Header.Set("User-Agent", ua)
 		preq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		preq.Header.Set("Referer", "https://www.bluegolf.com/")
+		client := newClient(true)
 		if presp, err := client.Do(preq); err == nil {
 			io.Copy(io.Discard, presp.Body)
 			presp.Body.Close()
+			log.Printf("[BlueGolf] primed cookies via %s (status=%d)", primeURL, presp.StatusCode)
+			// Log cookies for host (redact values in real prod if sensitive)
+			if u, err := url.Parse(primeURL); err == nil {
+				for _, c := range jar.Cookies(u) {
+					log.Printf("[BlueGolf] cookie set: %s=...; domain=%s; path=%s", c.Name, c.Domain, c.Path)
+				}
+			}
+		} else {
+			log.Printf("[BlueGolf] prime request error: %v", err)
 		}
 	}
 
-	type attempt struct{ withXHR bool }
-	tries := []attempt{{withXHR: true}, {withXHR: false}}
+	type attempt struct {
+		name     string
+		withXHR  bool
+		h2       bool
+		accept   string
+		addFetch bool
+	}
+	tries := []attempt{
+		{name: "xhr+h2+fetch", withXHR: true, h2: true, accept: "application/json, text/javascript, */*; q=0.01", addFetch: true},
+		{name: "xhr+h1+fetch", withXHR: true, h2: false, accept: "application/json, text/javascript, */*; q=0.01", addFetch: true},
+		{name: "plain+h1", withXHR: false, h2: false, accept: "application/json, */*;q=0.8", addFetch: false},
+		{name: "star+h2", withXHR: false, h2: true, accept: "*/*", addFetch: false},
+	}
 
 	var lastDiag error
 
 	for _, t := range tries {
+		client := newClient(t.h2)
+
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, queryURL, nil)
-		req.Header.Set("User-Agent", ua)
-		req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
-		req.Header.Set("Referer", primeURL)
-		req.Header.Set("Origin", "https://nhgaclub.bluegolf.com")
-		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-		if t.withXHR {
-			req.Header.Set("X-Requested-With", "XMLHttpRequest")
-		}
+		setJSONHeaders(req, t.accept, t.withXHR, t.addFetch, primeURL, "https://nhgaclub.bluegolf.com")
+
+		log.Printf("[BlueGolf] TRY %q url=%s headers={Accept:%q XHR:%t H2:%t Fetch:%t Referer:%q}",
+			t.name, queryURL, t.accept, t.withXHR, t.h2, t.addFetch, req.Header.Get("Referer"))
 
 		resp, err := client.Do(req)
 		if err != nil {
-			lastDiag = fmt.Errorf("request error: %w", err)
+			lastDiag = fmt.Errorf("request error on %s: %w", t.name, err)
+			log.Printf("[BlueGolf] %s ERROR: %v", t.name, lastDiag)
 			continue
 		}
 
-		// Handle a single manual redirect hop, capturing Location
+		// If redirect, log and follow a single hop manually so we can capture the target.
 		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 			loc := resp.Header.Get("Location")
 			bodyPeek, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 			resp.Body.Close()
-
-			if loc == "" {
-				lastDiag = fmt.Errorf("redirect %d without Location; body: %s", resp.StatusCode, string(bodyPeek))
-				continue
+			log.Printf("[BlueGolf] %s REDIRECT: %d -> %s\npeek:\n%s", t.name, resp.StatusCode, loc, string(bodyPeek))
+			if loc != "" {
+				u, _ := resp.Request.URL.Parse(loc)
+				req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+				req2.Header = req.Header.Clone()
+				resp2, err2 := client.Do(req2)
+				if err2 != nil {
+					lastDiag = fmt.Errorf("follow redirect error on %s to %s: %w", t.name, u.String(), err2)
+					log.Printf("[BlueGolf] %s FOLLOW ERROR: %v", t.name, lastDiag)
+					continue
+				}
+				resp = resp2
 			}
-			u, _ := resp.Request.URL.Parse(loc)
-			req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-			req2.Header = req.Header.Clone()
-			resp2, err2 := client.Do(req2)
-			if err2 != nil {
-				lastDiag = fmt.Errorf("follow redirect to %s failed: %w", u.String(), err2)
-				continue
-			}
-			resp = resp2
 		}
 
 		ct := strings.ToLower(resp.Header.Get("Content-Type"))
 		bodyPeek, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 		resp.Body.Close()
 
-		// If mislabeled, detect JSON by first char
+		log.Printf("[BlueGolf] %s STATUS: %d CT: %q FINAL: %s", t.name, resp.StatusCode, ct, func() string {
+			if resp.Request != nil && resp.Request.URL != nil {
+				return resp.Request.URL.String()
+			}
+			return "(unknown)"
+		}())
+
+		// Heuristic: accept mislabeled JSON if it looks like it
 		isJSON := strings.Contains(ct, "application/json") || strings.Contains(ct, "text/json")
 		trim := bytes.TrimSpace(bodyPeek)
 		if !isJSON && len(trim) > 0 && (trim[0] == '{' || trim[0] == '[') {
 			isJSON = true
+			log.Printf("[BlueGolf] %s treating as JSON by heuristic (first byte=%q)", t.name, string(trim[0]))
 		}
-		if !isJSON || resp.StatusCode/100 != 2 {
-			lastDiag = fmt.Errorf("non-JSON: status=%d ct=%q url=%s\npeek:\n%s",
-				resp.StatusCode, ct, queryURL, string(bodyPeek))
+
+		if resp.StatusCode/100 != 2 || !isJSON {
+			lastDiag = fmt.Errorf("non-JSON or bad status on %s: status=%d ct=%q finalURL=%s",
+				t.name, resp.StatusCode, ct, func() string {
+					if resp.Request != nil && resp.Request.URL != nil {
+						return resp.Request.URL.String()
+					}
+					return "(unknown)"
+				}(),
+			)
+			peekLog := string(bodyPeek)
+			if len(peekLog) > 1200 {
+				peekLog = peekLog[:1200] + "...(truncated)"
+			}
+			log.Printf("[BlueGolf] %s BODY PEEK:\n%s", t.name, peekLog)
 			continue
 		}
 
-		// Decode
 		var env tournamentsEnvelope
 		if err := json.NewDecoder(bytes.NewReader(bodyPeek)).Decode(&env); err != nil {
-			lastDiag = fmt.Errorf("decode error (ct=%q status=%d url=%s): %w\npeek:\n%s",
-				ct, resp.StatusCode, queryURL, err, string(bodyPeek))
+			lastDiag = fmt.Errorf("decode error on %s: %w", t.name, err)
+			peekLog := string(bodyPeek)
+			if len(peekLog) > 1200 {
+				peekLog = peekLog[:1200] + "...(truncated)"
+			}
+			log.Printf("[BlueGolf] %s DECODE ERROR: %v\nBODY PEEK:\n%s", t.name, err, peekLog)
 			continue
 		}
+
+		log.Printf("[BlueGolf] %s SUCCESS: parsed %d tournaments", t.name, len(env.Tournaments))
 		return &env, nil
 	}
 
