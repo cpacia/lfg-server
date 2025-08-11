@@ -210,3 +210,16 @@ type WGRRank struct {
 	Points string `json:"points"`
 	User   string `json:"user"`
 }
+
+type Tournament struct {
+	Name       string `json:"name"`
+	Date       string `json:"date"`
+	UsedInCalc bool   `json:"usedInCalc"`
+	Score      string `json:"scores"`
+	Points     string `json:"lscore"`
+	Place      string `json:"place"`
+}
+
+type tournamentsEnvelope struct {
+	Tournaments []Tournament `json:"tournaments"`
+}

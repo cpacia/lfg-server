@@ -114,6 +114,7 @@ func main() {
 	r.Post("/api/standings-urls", authMiddleware(s.POSTStandingsUrls))
 	r.Put("/api/standings-urls", authMiddleware(s.PUTStandingsUrls))
 	r.Delete("/api/standings-urls", authMiddleware(s.DELETEStandingsUrls))
+	r.Get("/api/standings-data/{type}/{user}", s.GETStandingsUserData)
 	r.Post("/api/refresh-standings", authMiddleware(s.POSTRefreshStandings))
 
 	r.Get("/api/events", s.GETEvents)

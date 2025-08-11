@@ -8,9 +8,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/net/context"
 	"gorm.io/gorm"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -186,12 +188,7 @@ func (s *Server) GETStandings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(years) == 0 {
-		json.NewEncoder(w).Encode(map[string]any{
-			"calendarYear":    nil,
-			"additionalYears": []string{},
-			"season":          []SeasonRank{},
-			"wgr":             []WGRRank{},
-		})
+		json.NewEncoder(w).Encode("[]")
 		return
 	}
 
@@ -263,6 +260,115 @@ func (s *Server) GETStandingsUrls(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(dbStandings)
+}
+
+func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
+	requestedYear := r.URL.Query().Get("year")
+	typ := strings.ToLower(chi.URLParam(r, "type"))
+	if typ != "season" && typ != "wgr" {
+		http.Error(w, "Type must be season or wgr", http.StatusBadRequest)
+		return
+	}
+	user := chi.URLParam(r, "user")
+	if user == "" {
+		http.Error(w, "User must be provided", http.StatusBadRequest)
+		return
+	}
+
+	var years []string
+	if err := s.db.Model(&Standings{}).
+		Distinct().
+		Pluck("calendar_year", &years).Error; err != nil {
+		http.Error(w, "Failed to fetch years", http.StatusInternalServerError)
+		return
+	}
+
+	if len(years) == 0 {
+		// FIXME: actual return
+		json.NewEncoder(w).Encode(map[string]any{
+			"calendarYear":    nil,
+			"additionalYears": []string{},
+			"season":          []SeasonRank{},
+			"wgr":             []WGRRank{},
+		})
+		return
+	}
+
+	// Sort descending
+	sort.Sort(sort.Reverse(sort.StringSlice(years)))
+
+	// Choose year: requested or latest
+	targetYear := years[0]
+	if requestedYear != "" {
+		found := false
+		for _, y := range years {
+			if y == requestedYear {
+				targetYear = requestedYear
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "Year not found", http.StatusNotFound)
+			return
+		}
+	}
+
+	var standings Standings
+	result := s.db.Where("calendar_year = ?", targetYear).First(&standings)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			http.Error(w, "Standings not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	var url string
+	if typ == "season" {
+		url = standings.SeasonStandingsUrl
+	} else {
+		url = standings.WgrStandingsUrl
+	}
+	club, contest, err := parseBlueGolf(url)
+	if err != nil {
+		http.Error(w, "Error parsing blue golf url", http.StatusInternalServerError)
+		return
+	}
+	queryUrl := fmt.Sprintf("https://nhgaclub.bluegolf.com/bluegolfw/%s/profile/%s/poyprofile.json?award=%s", club, user, contest)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, queryUrl, nil)
+	if err != nil {
+		http.Error(w, "Error querying bluegolf1", http.StatusInternalServerError)
+		return
+	}
+	// Optional but nice: pretend to be a normal browser to avoid odd blocks.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (+https://example.com) Go-http-client/1.1")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "Error querying bluegolf2", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "Error querying bluegolf3", http.StatusInternalServerError)
+		return
+	}
+
+	var env tournamentsEnvelope
+	dec := json.NewDecoder(resp.Body)
+	if err := dec.Decode(&env); err != nil {
+		fmt.Println(err)
+		http.Error(w, "Error querying bluegolf4", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(env.Tournaments)
 }
 
 func (s *Server) POSTStandingsUrls(w http.ResponseWriter, r *http.Request) {
@@ -1425,4 +1531,30 @@ func (s *Server) GETDataDirectory(w http.ResponseWriter, r *http.Request) {
 		_, err = io.Copy(writer, inFile)
 		return err
 	})
+}
+
+func parseBlueGolf(raw string) (club, contest string, err error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Split into path segments
+	segs := strings.Split(strings.Trim(u.EscapedPath(), "/"), "/")
+
+	// Find the segment after "bluegolfw" and after "poy"
+	var iBlue, iPoy = -1, -1
+	for i, s := range segs {
+		if s == "bluegolfw" {
+			iBlue = i
+		} else if s == "poy" {
+			iPoy = i
+		}
+	}
+
+	if iBlue < 0 || iBlue+1 >= len(segs) || iPoy < 0 || iPoy+1 >= len(segs) {
+		return "", "", fmt.Errorf("unexpected path format: %q", u.Path)
+	}
+
+	return segs[iBlue+1], segs[iPoy+1], nil
 }
