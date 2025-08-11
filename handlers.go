@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +12,10 @@ import (
 	"golang.org/x/net/context"
 	"gorm.io/gorm"
 	"io"
+	"log"
+	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -336,39 +340,16 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error parsing blue golf url", http.StatusInternalServerError)
 		return
 	}
+
 	queryUrl := fmt.Sprintf("https://nhgaclub.bluegolf.com/bluegolfw/%s/profile/%s/poyprofile.json?award=%s", club, user, contest)
-	fmt.Println("***", queryUrl)
+	primeURL := fmt.Sprintf("https://nhgaclub.bluegolf.com/bluegolfw/%s/profile/%s/poyprofile.htm?award=%s", club, user, contest)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, queryUrl, nil)
+	env, err := fetchBlueGolfJSON(r.Context(), queryUrl, primeURL)
 	if err != nil {
-		http.Error(w, "Error creating bluegolf request", http.StatusInternalServerError)
+		log.Printf("BlueGolf diag: %v", err)
+		http.Error(w, "Upstream returned non-JSON", http.StatusBadGateway)
 		return
 	}
-	// Optional but nice: pretend to be a normal browser to avoid odd blocks.
-	req.Header.Set("User-Agent", "Mozilla/5.0 (+https://example.com) Go-http-client/1.1")
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Bluegolf return error: %s", err), http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		http.Error(w, fmt.Sprintf("Bluegolf return error code: %s", resp.StatusCode), http.StatusInternalServerError)
-		return
-	}
-
-	var env tournamentsEnvelope
-	dec := json.NewDecoder(resp.Body)
-	if err := dec.Decode(&env); err != nil {
-		dump, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(dump))
-		http.Error(w, "Error pasrsing bluegolf response", http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(env.Tournaments)
 }
@@ -641,7 +622,6 @@ func parseEventFromMultipart(r *http.Request) (*Event, error) {
 	jsonPart := r.FormValue("event")
 	var event Event
 	if err := json.Unmarshal([]byte(jsonPart), &event); err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 	return &event, nil
@@ -1559,4 +1539,112 @@ func parseBlueGolf(raw string) (club, contest string, err error) {
 	}
 
 	return segs[iBlue+1], segs[iPoy+1], nil
+}
+
+// fetchBlueGolfJSON gets the JSON (handling cookies, headers, redirects, and IPv4-only path).
+func fetchBlueGolfJSON(ctx context.Context, queryURL, primeURL string) (*tournamentsEnvelope, error) {
+	jar, _ := cookiejar.New(nil)
+
+	// Force IPv4 (edges sometimes differ on v6)
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.DialContext(ctx, "tcp4", addr)
+		},
+		ForceAttemptHTTP2: true,
+	}
+
+	client := &http.Client{
+		Timeout:   20 * time.Second,
+		Jar:       jar,
+		Transport: transport,
+		// Show 30x so we can inspect Location
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	}
+
+	ua := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+	// 1) Prime cookies (ignore status; just read to EOF)
+	if primeURL != "" {
+		preq, _ := http.NewRequestWithContext(ctx, http.MethodGet, primeURL, nil)
+		preq.Header.Set("User-Agent", ua)
+		preq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		preq.Header.Set("Referer", "https://www.bluegolf.com/")
+		if presp, err := client.Do(preq); err == nil {
+			io.Copy(io.Discard, presp.Body)
+			presp.Body.Close()
+		}
+	}
+
+	type attempt struct{ withXHR bool }
+	tries := []attempt{{withXHR: true}, {withXHR: false}}
+
+	var lastDiag error
+
+	for _, t := range tries {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, queryURL, nil)
+		req.Header.Set("User-Agent", ua)
+		req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
+		req.Header.Set("Referer", primeURL)
+		req.Header.Set("Origin", "https://nhgaclub.bluegolf.com")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		if t.withXHR {
+			req.Header.Set("X-Requested-With", "XMLHttpRequest")
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastDiag = fmt.Errorf("request error: %w", err)
+			continue
+		}
+
+		// Handle a single manual redirect hop, capturing Location
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			loc := resp.Header.Get("Location")
+			bodyPeek, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			resp.Body.Close()
+
+			if loc == "" {
+				lastDiag = fmt.Errorf("redirect %d without Location; body: %s", resp.StatusCode, string(bodyPeek))
+				continue
+			}
+			u, _ := resp.Request.URL.Parse(loc)
+			req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+			req2.Header = req.Header.Clone()
+			resp2, err2 := client.Do(req2)
+			if err2 != nil {
+				lastDiag = fmt.Errorf("follow redirect to %s failed: %w", u.String(), err2)
+				continue
+			}
+			resp = resp2
+		}
+
+		ct := strings.ToLower(resp.Header.Get("Content-Type"))
+		bodyPeek, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+		resp.Body.Close()
+
+		// If mislabeled, detect JSON by first char
+		isJSON := strings.Contains(ct, "application/json") || strings.Contains(ct, "text/json")
+		trim := bytes.TrimSpace(bodyPeek)
+		if !isJSON && len(trim) > 0 && (trim[0] == '{' || trim[0] == '[') {
+			isJSON = true
+		}
+		if !isJSON || resp.StatusCode/100 != 2 {
+			lastDiag = fmt.Errorf("non-JSON: status=%d ct=%q url=%s\npeek:\n%s",
+				resp.StatusCode, ct, queryURL, string(bodyPeek))
+			continue
+		}
+
+		// Decode
+		var env tournamentsEnvelope
+		if err := json.NewDecoder(bytes.NewReader(bodyPeek)).Decode(&env); err != nil {
+			lastDiag = fmt.Errorf("decode error (ct=%q status=%d url=%s): %w\npeek:\n%s",
+				ct, resp.StatusCode, queryURL, err, string(bodyPeek))
+			continue
+		}
+		return &env, nil
+	}
+
+	return nil, fmt.Errorf("BlueGolf fetch failed: %v", lastDiag)
 }
