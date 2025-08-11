@@ -341,7 +341,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, queryUrl, nil)
 	if err != nil {
-		http.Error(w, "Error querying bluegolf1", http.StatusInternalServerError)
+		http.Error(w, "Error creating bluegolf request", http.StatusInternalServerError)
 		return
 	}
 	// Optional but nice: pretend to be a normal browser to avoid odd blocks.
@@ -350,20 +350,22 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		http.Error(w, "Error querying bluegolf2", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Bluegolf return error: %s", err), http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		http.Error(w, "Error querying bluegolf3", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Bluegolf return error code: %s", resp.StatusCode), http.StatusInternalServerError)
 		return
 	}
 
 	var env tournamentsEnvelope
 	dec := json.NewDecoder(resp.Body)
 	if err := dec.Decode(&env); err != nil {
-		http.Error(w, "Error querying bluegolf4", http.StatusInternalServerError)
+		dump, _ := io.ReadAll(resp.Body)
+		fmt.Println(string(dump))
+		http.Error(w, "Error pasrsing bluegolf response", http.StatusInternalServerError)
 		return
 	}
 
