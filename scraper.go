@@ -5,7 +5,10 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
 	"gorm.io/gorm"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 )
 
 func updateStandings(db *gorm.DB, s *Standings) error {
@@ -591,4 +594,164 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		})
 	}
 	return nil
+}
+
+func ScrapeTeeTimes(startURL string) ([]TeeTime, error) {
+	c := colly.NewCollector()
+	c.Async = true
+
+	var (
+		out     []TeeTime
+		mu      sync.Mutex
+		seenURL = map[string]bool{}
+		seenRow = map[string]bool{}
+	)
+
+	normalizeURL := func(raw string) string { /* ... same as before ... */ return raw }
+	normalizeHole := func(h string) string { /* ... same as before ... */ return h }
+	normalizeTime := func(t string) string { /* ... same as before ... */ return t }
+	normalizePlayers := func(ps []string) []string { /* ... same as before ... */ return ps }
+
+	// --- NEW: capture round per page and store in Request context
+	c.OnHTML("#rndSelect", func(e *colly.HTMLElement) {
+		block := e.DOM
+		// collect all numbers in the block text
+		txtNums := map[int]bool{}
+		numRe := regexp.MustCompile(`\d+`)
+		for _, s := range numRe.FindAllString(block.Text(), -1) {
+			if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+				txtNums[n] = true
+			}
+		}
+		// collect all numbers that are inside links (those are "other rounds")
+		anchorNums := map[int]bool{}
+		block.Find("a").Each(func(_ int, a *goquery.Selection) {
+			if n, err := strconv.Atoi(strings.TrimSpace(a.Text())); err == nil {
+				anchorNums[n] = true
+			}
+		})
+
+		round := 0
+		// current round is the number in the text that is NOT a link
+		for n := range txtNums {
+			if !anchorNums[n] {
+				round = n
+				break
+			}
+		}
+		// fallback for the common two-round case: if only one link "2", current is 1, etc.
+		if round == 0 && len(anchorNums) == 1 && len(txtNums) == 2 {
+			for n := range anchorNums {
+				if n == 1 {
+					round = 2
+				} else if n == 2 {
+					round = 1
+				}
+			}
+		}
+		// last-resort: query params
+		if round == 0 {
+			if v := e.Request.URL.Query().Get("round"); v != "" {
+				if n, err := strconv.Atoi(v); err == nil {
+					round = n
+				}
+			} else if v := e.Request.URL.Query().Get("rnd"); v != "" {
+				if n, err := strconv.Atoi(v); err == nil {
+					round = n
+				}
+			}
+		}
+
+		e.Request.Ctx.Put("round", strconv.Itoa(round))
+	})
+
+	// ROW PARSER (unchanged except: round comes from ctx)
+	c.OnHTML("table.table-bordered.table-striped.table-sm tbody > tr", func(e *colly.HTMLElement) {
+		tds := e.DOM.ChildrenFiltered("td")
+		if tds.Length() < 3 {
+			return
+		}
+
+		round := 0
+		if s := e.Request.Ctx.Get("round"); s != "" {
+			if n, err := strconv.Atoi(s); err == nil {
+				round = n
+			}
+		}
+
+		timeText := strings.TrimSpace(tds.Eq(0).Find("span").First().Text())
+		if timeText == "" {
+			timeText = strings.TrimSpace(tds.Eq(0).Text())
+		}
+		timeText = normalizeTime(timeText)
+		if timeText == "" {
+			return
+		}
+
+		holeText := strings.TrimSpace(tds.Eq(1).Text())
+		if holeText == "" {
+			mobileHole := strings.TrimSpace(tds.Eq(0).Find(".d-md-none").Text())
+			holeText = strings.TrimPrefix(mobileHole, "#")
+		}
+		holeText = normalizeHole(holeText)
+
+		var players []string
+		td3 := tds.Eq(2)
+		td3.Find("div[id^=pairing_] td.p-0.border-0.align-middle").Each(func(_ int, s *goquery.Selection) {
+			if name := strings.TrimSpace(s.Text()); name != "" {
+				players = append(players, name)
+			}
+		})
+		if len(players) == 0 {
+			if summary := strings.TrimSpace(td3.ChildrenFiltered("div").First().Text()); summary != "" {
+				for _, part := range strings.Split(summary, ",") {
+					if name := strings.TrimSpace(part); name != "" {
+						players = append(players, name)
+					}
+				}
+			}
+		}
+		players = normalizePlayers(players)
+
+		key := timeText + "|" + holeText + "|" + strings.Join(players, ",")
+		mu.Lock()
+		if !seenRow[key] {
+			seenRow[key] = true
+			out = append(out, TeeTime{Round: round, Time: timeText, Hole: holeText, Players: players})
+		}
+		mu.Unlock()
+	})
+
+	// FOLLOW OTHER ROUND(S) (same logic as your last version)
+	c.OnHTML("#rndSelect a[href], .round-select a[href], a[href*='round='], a[href*='rnd=']", func(e *colly.HTMLElement) {
+		href := strings.TrimSpace(e.Attr("href"))
+		if href == "" {
+			return
+		}
+		next := normalizeURL(e.Request.AbsoluteURL(href))
+		cur := normalizeURL(e.Request.URL.String())
+		if next == "" || next == cur {
+			return
+		}
+		mu.Lock()
+		if !seenURL[next] {
+			seenURL[next] = true
+			mu.Unlock()
+			_ = c.Visit(next)
+			return
+		}
+		mu.Unlock()
+	})
+
+	start := normalizeURL(startURL)
+	seenURL[start] = true
+	if err := c.Visit(start); err != nil {
+		return nil, err
+	}
+	c.Wait()
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no tee times parsed from URL: %s", startURL)
+	}
+	return out, nil
 }

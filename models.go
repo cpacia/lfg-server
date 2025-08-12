@@ -223,15 +223,9 @@ type Tournament struct {
 	Place      string `json:"place"`
 }
 
-type BGTournament struct {
-	Name       string `json:"name"`
-	Date       string `json:"date"`
-	UsedInCalc bool   `json:"usedInCalc"`
-	Score      string `json:"scores"`
-	Points     string `json:"lscore"`
-	Place      string `json:"place"`
-}
-
-type tournamentsEnvelope struct {
-	Tournaments []BGTournament `json:"tournaments"`
+type TeeTime struct {
+	Round   int
+	Time    string   `json:"time"`
+	Hole    string   `json:"hole"`
+	Players []string `json:"players"`
 }

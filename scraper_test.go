@@ -410,6 +410,38 @@ func Test_updateMatchPlayResults(t *testing.T) {
 	fmt.Println(len(matchPlayMatches))
 }
 
+func Test_ScrapeTeeTimes(t *testing.T) {
+	path := filepath.Join("testdata", "tee-times.html")
+	htmlContent, err := os.ReadFile(path)
+	assert.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(htmlContent)
+	}))
+	defer server.Close()
+
+	teeTimes, err := ScrapeTeeTimes(server.URL)
+	assert.NoError(t, err)
+
+	assert.Len(t, teeTimes, 16)
+}
+
+func Test_ScrapeTeeTimes2(t *testing.T) {
+	path := filepath.Join("testdata", "tee-times2.html")
+	htmlContent, err := os.ReadFile(path)
+	assert.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(htmlContent)
+	}))
+	defer server.Close()
+
+	teeTimes, err := ScrapeTeeTimes(server.URL)
+	assert.NoError(t, err)
+
+	assert.Len(t, teeTimes, 7)
+}
+
 /*func TestPrintHtml(t *testing.T) {
 	// Create a new collector
 	c := colly.NewCollector()
