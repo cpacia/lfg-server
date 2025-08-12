@@ -224,7 +224,7 @@ type Tournament struct {
 }
 
 type TeeTime struct {
-	Round   int
+	Round   int      `json:"round"`
 	Time    string   `json:"time"`
 	Hole    string   `json:"hole"`
 	Players []string `json:"players"`

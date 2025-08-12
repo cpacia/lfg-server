@@ -1624,3 +1624,48 @@ func parseBlueGolf(raw string) (club, contest string, err error) {
 
 	return segs[iBlue+1], segs[iPoy+1], nil
 }
+
+func (s *Server) GetTeeTimes(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "eventID")
+	if eventID == "" {
+		http.Error(w, "Missing event ID", http.StatusBadRequest)
+		return
+	}
+
+	var event Event
+	if err := s.db.First(&event, "event_id = ?", eventID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Event not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	u, err := url.Parse(event.BlueGolfUrl)
+	if err != nil {
+		panic(err)
+	}
+
+	// Split the path into segments
+	parts := strings.Split(u.Path, "/")
+
+	// Find the segment after "events"
+	var seasonID string
+	for i, p := range parts {
+		if p == "events" && i+1 < len(parts) {
+			seasonID = parts[i+1]
+			break
+		}
+	}
+
+	teeTimeUrl := fmt.Sprintf("https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/%s/pairings.htm", seasonID)
+	teeTimes, err := ScrapeTeeTimes(teeTimeUrl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(teeTimes)
+}

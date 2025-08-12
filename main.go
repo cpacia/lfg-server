@@ -153,6 +153,7 @@ func main() {
 	r.Get("/api/match-play/players", s.GETMatchPlayPlayers)
 
 	r.Get("/api/current-year", s.GETCurrentYear)
+	r.Get("/api/tee-times/{eventID}", s.GetTeeTimes)
 
 	http.ListenAndServe(":8080", r)
 }
