@@ -1,11 +1,11 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"regexp"
 	"sort"
@@ -783,54 +783,70 @@ func sortTeeTimes(teeTimes []TeeTime) {
 	})
 }
 
+// assume: s.workerMap map[time.Time]*PollWorker
+
 func (s *Server) PollActiveEvents() {
-	// If we already have a worker for today return
 	nowUTC := time.Now().UTC()
 	today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 
+	// already running?
 	s.workerMtx.RLock()
-	if _, ok := s.workerMap[today.String()]; ok {
-		return
-	}
+	_, exists := s.workerMap[today]
 	s.workerMtx.RUnlock()
-
-	var event Event
-	err := s.db.Where("date = ?", datatypes.Date(time.Now().UTC())).First(&event).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		fmt.Printf("Polling error querying db for events %s\n", err.Error())
+	if exists {
 		return
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return
-	}
-	if event.RegistrationOpen == false &&
-		event.NetLeaderboardUrl != "" &&
-		event.GrossLeaderboardUrl != "" &&
-		event.SkinsLeaderboardUrl != "" &&
-		event.TeamsLeaderboardUrl != "" &&
-		event.WgrLeaderboardUrl != "" &&
-		event.BlueGolfUrl != "" {
 
-		s.workerMtx.Lock()
-		pw := &PollWorker{
-			db:          s.db,
-			eventID:     event.EventID,
-			blueGolfUrl: event.BlueGolfUrl,
-			netUrl:      event.NetLeaderboardUrl,
-			grossUrl:    event.GrossLeaderboardUrl,
-			skinsUrl:    event.SkinsLeaderboardUrl,
-			teamsUrl:    event.TeamsLeaderboardUrl,
-			wgrUrl:      event.WgrLeaderboardUrl,
-			tearDown: func() {
-				s.workerMtx.Lock()
-				delete(s.workerMap, today.String())
-				s.workerMtx.Unlock()
-			},
+	// fetch today's event (UTC midnight..midnight)
+	start := today
+	end := start.Add(24 * time.Hour)
+
+	var ev Event
+	if err := s.db.Where("date >= ? AND date < ?", start, end).First(&ev).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			fmt.Printf("Polling error querying db for events %s\n", err)
 		}
-		s.workerMap[today.String()] = pw
-		go pw.poll()
-		s.workerMtx.Unlock()
+		return
 	}
+	if !eventReady(ev) {
+		return
+	}
+
+	pw := &PollWorker{
+		db:          s.db,
+		eventID:     ev.EventID,
+		blueGolfUrl: ev.BlueGolfUrl,
+		netUrl:      ev.NetLeaderboardUrl,
+		grossUrl:    ev.GrossLeaderboardUrl,
+		skinsUrl:    ev.SkinsLeaderboardUrl,
+		teamsUrl:    ev.TeamsLeaderboardUrl,
+		wgrUrl:      ev.WgrLeaderboardUrl,
+	}
+
+	// register then start
+	s.workerMtx.Lock()
+	if _, dup := s.workerMap[today]; dup {
+		s.workerMtx.Unlock()
+		return
+	}
+	s.workerMap[today] = pw
+	s.workerMtx.Unlock()
+
+	go pw.poll(func() {
+		s.workerMtx.Lock()
+		delete(s.workerMap, today)
+		s.workerMtx.Unlock()
+	})
+}
+
+func eventReady(e Event) bool {
+	return !e.RegistrationOpen &&
+		e.BlueGolfUrl != "" &&
+		e.NetLeaderboardUrl != "" &&
+		e.GrossLeaderboardUrl != "" &&
+		e.SkinsLeaderboardUrl != "" &&
+		e.TeamsLeaderboardUrl != "" &&
+		e.WgrLeaderboardUrl != ""
 }
 
 type PollWorker struct {
@@ -839,64 +855,87 @@ type PollWorker struct {
 	blueGolfUrl string
 	lastTeeTime *time.Time
 
-	netUrl   string
-	grossUrl string
-	skinsUrl string
-	teamsUrl string
-	wgrUrl   string
-
-	setComplete bool
-	tearDown    func()
+	netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl string
+	setComplete                                  bool
 }
 
-func (p *PollWorker) poll() {
-	ticker := time.NewTicker(time.Minute * 5)
-	tearDown := time.NewTicker(time.Hour * 24)
+// poll runs until teardown fires.
+func (p *PollWorker) poll(onTearDown func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	// teardown timer: 24h initially; later reset to 10h after completion
+	teardown := time.NewTimer(24 * time.Hour)
+	defer func() {
+		if !teardown.Stop() {
+			<-teardown.C // drain if needed
+		}
+	}()
+
+	const layout = "3:04 PM"
 
 	for {
 		select {
+		case <-ctx.Done():
+			onTearDown()
+			return
+
 		case <-ticker.C:
+			// fetch last tee time once
 			if p.lastTeeTime == nil {
 				teeTimes, err := ScrapeTeeTimes(p.blueGolfUrl)
+				if err != nil || len(teeTimes) == 0 {
+					continue
+				}
+				// last tee time string -> time today in local? use UTC date with parsed clock
+				tm, err := time.Parse(layout, teeTimes[len(teeTimes)-1].Time)
 				if err != nil {
 					continue
 				}
-				if len(teeTimes) == 0 {
-					continue
-				}
-				layout := "3:04 PM"
-				teeTime, err := time.Parse(layout, teeTimes[len(teeTimes)-1].Time)
-				if err != nil {
-					continue
-				}
-				p.lastTeeTime = &teeTime
+				nowUTC := time.Now().UTC()
+				tt := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(),
+					tm.Hour(), tm.Minute(), 0, 0, time.UTC)
+				p.lastTeeTime = &tt
 			}
-			if time.Now().After(*p.lastTeeTime) {
+
+			if time.Now().UTC().After(*p.lastTeeTime) {
 				updateResults(p.db, p.eventID, p.netUrl, p.grossUrl, p.skinsUrl, p.teamsUrl, p.wgrUrl)
 
 				if !p.setComplete {
-					var results []NetResult
-					if err := p.db.Where("event_id = ?", p.eventID).Find(&results).Error; err != nil {
-						continue
-					}
-					for _, r := range results {
-						if r.Strokes != "" {
-							var event Event
-							err := p.db.Where("event_id = ?", p.eventID).First(&event).Error
-							if err != nil {
-								continue
+					var haveScored bool
+					var rows []NetResult
+					if err := p.db.Where("event_id = ?", p.eventID).Find(&rows).Error; err == nil {
+						for _, r := range rows {
+							if r.Strokes != "" {
+								haveScored = true
+								break
 							}
-							p.db.Save(&event)
-							p.setComplete = true
-							break
 						}
 					}
-					tearDown.Stop()
-					tearDown = time.NewTicker(time.Hour * 10)
+					if haveScored {
+						// mark complete once
+						_ = p.db.Model(&Event{}).
+							Where("event_id = ?", p.eventID).
+							Update("is_complete", true).Error
+						p.setComplete = true
+
+						// shorten teardown window to 10h
+						if !teardown.Stop() {
+							select {
+							case <-teardown.C:
+							default:
+							}
+						}
+						teardown.Reset(10 * time.Hour)
+					}
 				}
 			}
-		case <-tearDown.C:
-			go p.tearDown()
+
+		case <-teardown.C:
+			onTearDown()
 			return
 		}
 	}

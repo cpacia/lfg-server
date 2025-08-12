@@ -21,6 +21,7 @@ import (
 	"os/user"
 	"path"
 	"sync"
+	"time"
 )
 
 const (
@@ -45,7 +46,7 @@ type Server struct {
 	dataDir          string
 	loginRateLimiter *limiter.Limiter
 	devMode          bool
-	workerMap        map[string]*PollWorker
+	workerMap        map[time.Time]*PollWorker
 	workerMtx        sync.RWMutex
 }
 
@@ -105,7 +106,7 @@ func main() {
 		loginRateLimiter: lim,
 		devMode:          opts.Dev,
 		workerMtx:        sync.RWMutex{},
-		workerMap:        make(map[string]*PollWorker),
+		workerMap:        make(map[time.Time]*PollWorker),
 	}
 
 	r.Post("/api/login", s.POSTLoginHandler)
