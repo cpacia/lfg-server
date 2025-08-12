@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/user"
 	"path"
+	"sync"
 )
 
 const (
@@ -44,6 +45,8 @@ type Server struct {
 	dataDir          string
 	loginRateLimiter *limiter.Limiter
 	devMode          bool
+	workerMap        map[string]*PollWorker
+	workerMtx        sync.RWMutex
 }
 
 var (
@@ -101,6 +104,8 @@ func main() {
 		dataDir:          dataDir,
 		loginRateLimiter: lim,
 		devMode:          opts.Dev,
+		workerMtx:        sync.RWMutex{},
+		workerMap:        make(map[string]*PollWorker),
 	}
 
 	r.Post("/api/login", s.POSTLoginHandler)
@@ -154,6 +159,8 @@ func main() {
 
 	r.Get("/api/current-year", s.GETCurrentYear)
 	r.Get("/api/tee-times/{eventID}", s.GetTeeTimes)
+
+	go s.PollActiveEvents()
 
 	http.ListenAndServe(":8080", r)
 }

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"regexp"
 	"sort"
@@ -779,4 +781,123 @@ func sortTeeTimes(teeTimes []TeeTime) {
 
 		return ti.Before(tj)
 	})
+}
+
+func (s *Server) PollActiveEvents() {
+	// If we already have a worker for today return
+	nowUTC := time.Now().UTC()
+	today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+
+	s.workerMtx.RLock()
+	if _, ok := s.workerMap[today.String()]; ok {
+		return
+	}
+	s.workerMtx.RUnlock()
+
+	var event Event
+	err := s.db.Where("date = ?", datatypes.Date(time.Now().UTC())).First(&event).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		fmt.Printf("Polling error querying db for events %s\n", err.Error())
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return
+	}
+	if event.RegistrationOpen == false &&
+		event.NetLeaderboardUrl != "" &&
+		event.GrossLeaderboardUrl != "" &&
+		event.SkinsLeaderboardUrl != "" &&
+		event.TeamsLeaderboardUrl != "" &&
+		event.WgrLeaderboardUrl != "" &&
+		event.BlueGolfUrl != "" {
+
+		s.workerMtx.Lock()
+		pw := &PollWorker{
+			db:          s.db,
+			eventID:     event.EventID,
+			blueGolfUrl: event.BlueGolfUrl,
+			netUrl:      event.NetLeaderboardUrl,
+			grossUrl:    event.GrossLeaderboardUrl,
+			skinsUrl:    event.SkinsLeaderboardUrl,
+			teamsUrl:    event.TeamsLeaderboardUrl,
+			wgrUrl:      event.WgrLeaderboardUrl,
+			tearDown: func() {
+				s.workerMtx.Lock()
+				delete(s.workerMap, today.String())
+				s.workerMtx.Unlock()
+			},
+		}
+		s.workerMap[today.String()] = pw
+		go pw.poll()
+		s.workerMtx.Unlock()
+	}
+}
+
+type PollWorker struct {
+	db          *gorm.DB
+	eventID     string
+	blueGolfUrl string
+	lastTeeTime *time.Time
+
+	netUrl   string
+	grossUrl string
+	skinsUrl string
+	teamsUrl string
+	wgrUrl   string
+
+	setComplete bool
+	tearDown    func()
+}
+
+func (p *PollWorker) poll() {
+	ticker := time.NewTicker(time.Minute * 5)
+	tearDown := time.NewTicker(time.Hour * 24)
+
+	for {
+		select {
+		case <-ticker.C:
+			if p.lastTeeTime == nil {
+				teeTimes, err := ScrapeTeeTimes(p.blueGolfUrl)
+				if err != nil {
+					continue
+				}
+				if len(teeTimes) == 0 {
+					continue
+				}
+				layout := "3:04 PM"
+				teeTime, err := time.Parse(layout, teeTimes[len(teeTimes)-1].Time)
+				if err != nil {
+					continue
+				}
+				p.lastTeeTime = &teeTime
+			}
+			if time.Now().After(*p.lastTeeTime) {
+				updateResults(p.db, p.eventID, p.netUrl, p.grossUrl, p.skinsUrl, p.teamsUrl, p.wgrUrl)
+
+				if !p.setComplete {
+					var results []NetResult
+					if err := p.db.Where("event_id = ?", p.eventID).Find(&results).Error; err != nil {
+						continue
+					}
+					for _, r := range results {
+						if r.Strokes != "" {
+							var event Event
+							err := p.db.Where("event_id = ?", p.eventID).First(&event).Error
+							if err != nil {
+								continue
+							}
+							p.db.Save(&event)
+							p.setComplete = true
+							break
+						}
+					}
+					tearDown.Stop()
+					tearDown = time.NewTicker(time.Hour * 10)
+				}
+			}
+		case <-tearDown.C:
+			go p.tearDown()
+			return
+		}
+	}
 }
