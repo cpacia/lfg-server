@@ -864,7 +864,7 @@ func (p *PollWorker) poll(onTearDown func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(3 * time.Minute)
 	defer ticker.Stop()
 
 	// teardown timer: 24h initially; later reset to 10h after completion
