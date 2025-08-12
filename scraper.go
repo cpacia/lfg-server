@@ -6,9 +6,11 @@ import (
 	"github.com/gocolly/colly"
 	"gorm.io/gorm"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 func updateStandings(db *gorm.DB, s *Standings) error {
@@ -753,5 +755,28 @@ func ScrapeTeeTimes(startURL string) ([]TeeTime, error) {
 	if len(out) == 0 {
 		return nil, fmt.Errorf("no tee times parsed from URL: %s", startURL)
 	}
+	sortTeeTimes(out)
 	return out, nil
+}
+
+func sortTeeTimes(teeTimes []TeeTime) {
+	layout := "3:04 PM" // matches "8:45 AM", "1:51 PM", etc.
+
+	sort.Slice(teeTimes, func(i, j int) bool {
+		// First compare by round
+		if teeTimes[i].Round != teeTimes[j].Round {
+			return teeTimes[i].Round < teeTimes[j].Round
+		}
+
+		// Parse times to compare within round
+		ti, err1 := time.Parse(layout, teeTimes[i].Time)
+		tj, err2 := time.Parse(layout, teeTimes[j].Time)
+
+		// If parsing fails, just fall back to string compare
+		if err1 != nil || err2 != nil {
+			return teeTimes[i].Time < teeTimes[j].Time
+		}
+
+		return ti.Before(tj)
+	})
 }

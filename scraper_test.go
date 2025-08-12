@@ -442,6 +442,22 @@ func Test_ScrapeTeeTimes2(t *testing.T) {
 	assert.Len(t, teeTimes, 7)
 }
 
+func Test_sortTeeTimes(t *testing.T) {
+	teeTimes := []TeeTime{
+		{Round: 2, Time: "1:51 PM"},
+		{Round: 1, Time: "8:45 AM"},
+		{Round: 1, Time: "1:30 PM"},
+		{Round: 2, Time: "8:10 AM"},
+	}
+
+	sortTeeTimes(teeTimes)
+
+	assert.Equal(t, "8:45 AM", teeTimes[0].Time)
+	assert.Equal(t, "1:30 PM", teeTimes[1].Time)
+	assert.Equal(t, "8:10 AM", teeTimes[2].Time)
+	assert.Equal(t, "1:51 PM", teeTimes[3].Time)
+}
+
 /*func TestPrintHtml(t *testing.T) {
 	// Create a new collector
 	c := colly.NewCollector()
