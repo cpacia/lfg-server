@@ -314,54 +314,75 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 	var out []Tournament
 	if typ == "season" {
 		var results []NetResult
-		if err := s.db.Where("player = ?", player).
-			Find(&results).Error; err != nil {
+		if err := s.db.Where("player = ?", player).Find(&results).Error; err != nil {
 			http.Error(w, "Failed to load NET standings", http.StatusInternalServerError)
 			return
 		}
-		for _, res := range results {
-			var evt Event
-			if resp := s.db.First(&evt, "event_id = ?", res.EventID); resp.Error != nil {
-				fmt.Println(err)
-				http.Error(w, "Failed to load NET event", http.StatusInternalServerError)
-				return
-			}
-			if evt.DateString[:4] == targetYear {
+		ids := make([]string, 0, len(results))
+		for _, r := range results {
+			ids = append(ids, r.EventID)
+		}
+
+		var events []Event
+		if err := s.db.
+			Where("event_id IN ? AND substr(date_string, 1, 4) = ?", ids, targetYear). // adjust LEFT/substr per DB
+			Find(&events).Error; err != nil {
+			http.Error(w, "Failed to load NET events", http.StatusInternalServerError)
+			return
+		}
+		em := make(map[string]Event, len(events))
+		for _, e := range events {
+			em[e.EventID] = e
+		}
+
+		for _, r := range results {
+			if e, ok := em[r.EventID]; ok {
 				out = append(out, Tournament{
 					Year:       targetYear,
 					Player:     player,
-					Name:       evt.Name,
-					Date:       evt.DateString,
+					Name:       e.Name,
+					Date:       e.DateString,
 					UsedInCalc: false,
-					Score:      res.Total,
-					Points:     res.Points,
-					Place:      res.Rank,
+					Score:      r.Total,
+					Points:     r.Points,
+					Place:      r.Rank,
 				})
 			}
 		}
 	} else {
 		var results []WGRResult
-		if err := s.db.Where("player = ?", player).
-			Find(&results).Error; err != nil {
+		if err := s.db.Where("player = ?", player).Find(&results).Error; err != nil {
 			http.Error(w, "Failed to load WGR standings", http.StatusInternalServerError)
 			return
 		}
-		for _, res := range results {
-			var evt Event
-			if resp := s.db.First(&evt, "event_id = ?", res.EventID); resp.Error != nil {
-				http.Error(w, "Failed to load WGR event", http.StatusInternalServerError)
-				return
-			}
-			if evt.DateString[:4] == targetYear {
+		ids := make([]string, 0, len(results))
+		for _, r := range results {
+			ids = append(ids, r.EventID)
+		}
+
+		var events []Event
+		if err := s.db.
+			Where("event_id IN ? AND substr(date_string, 1, 4) = ?", ids, targetYear). // adjust LEFT/substr per DB
+			Find(&events).Error; err != nil {
+			http.Error(w, "Failed to load WGR events", http.StatusInternalServerError)
+			return
+		}
+		em := make(map[string]Event, len(events))
+		for _, e := range events {
+			em[e.EventID] = e
+		}
+
+		for _, r := range results {
+			if e, ok := em[r.EventID]; ok {
 				out = append(out, Tournament{
 					Year:       targetYear,
 					Player:     player,
-					Name:       evt.Name,
-					Date:       evt.DateString,
+					Name:       e.Name,
+					Date:       e.DateString,
 					UsedInCalc: false,
-					Score:      res.Total,
-					Points:     res.Points,
-					Place:      res.Rank,
+					Score:      r.Total,
+					Points:     r.Points,
+					Place:      r.Rank,
 				})
 			}
 		}
