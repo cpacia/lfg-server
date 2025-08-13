@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"regexp"
 	"sort"
@@ -521,7 +522,6 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Find("td").Eq(7).  // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
-			fmt.Println(i, player1, player2, winner, score)
 
 			if score == "Tied" {
 				score = ""
@@ -562,7 +562,6 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Find("td").Eq(7).  // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
-			fmt.Println(i, player1, player2, winner, score)
 
 			if score == "Tied" {
 				score = ""
@@ -786,7 +785,7 @@ func sortTeeTimes(teeTimes []TeeTime) {
 // assume: s.workerMap map[time.Time]*PollWorker
 
 func (s *Server) PollActiveEvents() {
-	nowUTC := time.Now().UTC()
+	nowUTC := time.Now()
 	today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 
 	// already running?
@@ -802,7 +801,7 @@ func (s *Server) PollActiveEvents() {
 	end := start.Add(24 * time.Hour)
 
 	var ev Event
-	if err := s.db.Where("date >= ? AND date < ?", start, end).First(&ev).Error; err != nil {
+	if err := s.db.Where("date >= ? AND date < ?", datatypes.Date(start), datatypes.Date(end)).First(&ev).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			fmt.Printf("Polling error querying db for events %s\n", err)
 		}
@@ -886,7 +885,9 @@ func (p *PollWorker) poll(onTearDown func()) {
 		case <-ticker.C:
 			// fetch last tee time once
 			if p.lastTeeTime == nil {
-				teeTimes, err := ScrapeTeeTimes(p.blueGolfUrl)
+				seasonID := parseBlueGolf(p.blueGolfUrl)
+				teeTimeUrl := fmt.Sprintf("https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/%s/pairings.htm", seasonID)
+				teeTimes, err := ScrapeTeeTimes(teeTimeUrl)
 				if err != nil || len(teeTimes) == 0 {
 					continue
 				}
@@ -895,13 +896,13 @@ func (p *PollWorker) poll(onTearDown func()) {
 				if err != nil {
 					continue
 				}
-				nowUTC := time.Now().UTC()
+				nowUTC := time.Now()
 				tt := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(),
 					tm.Hour(), tm.Minute(), 0, 0, time.UTC)
 				p.lastTeeTime = &tt
 			}
 
-			if time.Now().UTC().After(*p.lastTeeTime) {
+			if time.Now().After(*p.lastTeeTime) {
 				updateResults(p.db, p.eventID, p.netUrl, p.grossUrl, p.skinsUrl, p.teamsUrl, p.wgrUrl)
 
 				if !p.setComplete {

@@ -1599,32 +1599,6 @@ func (s *Server) GETDataDirectory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func parseBlueGolf(raw string) (club, contest string, err error) {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Split into path segments
-	segs := strings.Split(strings.Trim(u.EscapedPath(), "/"), "/")
-
-	// Find the segment after "bluegolfw" and after "poy"
-	var iBlue, iPoy = -1, -1
-	for i, s := range segs {
-		if s == "bluegolfw" {
-			iBlue = i
-		} else if s == "poy" {
-			iPoy = i
-		}
-	}
-
-	if iBlue < 0 || iBlue+1 >= len(segs) || iPoy < 0 || iPoy+1 >= len(segs) {
-		return "", "", fmt.Errorf("unexpected path format: %q", u.Path)
-	}
-
-	return segs[iBlue+1], segs[iPoy+1], nil
-}
-
 func (s *Server) GetTeeTimes(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
 	if eventID == "" {
@@ -1642,7 +1616,20 @@ func (s *Server) GetTeeTimes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := url.Parse(event.BlueGolfUrl)
+	seasonID := parseBlueGolf(event.BlueGolfUrl)
+	teeTimeUrl := fmt.Sprintf("https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/%s/pairings.htm", seasonID)
+	teeTimes, err := ScrapeTeeTimes(teeTimeUrl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(teeTimes)
+}
+
+func parseBlueGolf(bluegolfUrl string) string {
+	u, err := url.Parse(bluegolfUrl)
 	if err != nil {
 		panic(err)
 	}
@@ -1658,14 +1645,5 @@ func (s *Server) GetTeeTimes(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-
-	teeTimeUrl := fmt.Sprintf("https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/%s/pairings.htm", seasonID)
-	teeTimes, err := ScrapeTeeTimes(teeTimeUrl)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(teeTimes)
+	return seasonID
 }
