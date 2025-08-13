@@ -161,7 +161,13 @@ func main() {
 	r.Get("/api/current-year", s.GETCurrentYear)
 	r.Get("/api/tee-times/{eventID}", s.GetTeeTimes)
 
-	go s.PollActiveEvents()
+	go func() {
+		ticker := time.NewTicker(time.Minute * 5)
+
+		for range ticker.C {
+			s.PollActiveEvents()
+		}
+	}()
 
 	http.ListenAndServe(":8080", r)
 }
