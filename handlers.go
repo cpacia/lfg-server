@@ -665,6 +665,7 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if triggerScrape {
+		fmt.Println("triggering scrape")
 		selectUrl := func(existing, updated string) string {
 			if updated == existing {
 				return ""
@@ -680,6 +681,7 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 			selectUrl(existing.WgrLeaderboardUrl, updated.WgrLeaderboardUrl),
 		)
 		if err != nil {
+			fmt.Println("scrape error", err)
 			http.Error(w, fmt.Sprintf("Error downloading results: %s", err.Error()), http.StatusBadRequest)
 			return
 		}

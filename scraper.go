@@ -124,8 +124,22 @@ func updateResults(db *gorm.DB, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, w
 }
 
 func updateStandingsGeneric[T any](db *gorm.DB, url string, year string, newRow func(string, string, string, string, string, string) T) error {
-	c := colly.NewCollector()
+	c := colly.NewCollector(
+		// Optional: make it look like Chrome
+		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+			"AppleWebKit/537.36 (KHTML, like Gecko) " +
+			"Chrome/115.0.0.0 Safari/537.36"),
+	)
 	c.Async = true
+
+	c.OnRequest(func(r *colly.Request) {
+		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		r.Headers.Set("Accept-Language", "en-US,en;q=0.9")
+		r.Headers.Set("Cache-Control", "no-cache")
+		// You can spoof Referer or others if needed:
+		// r.Headers.Set("Referer", "https://www.google.com/")
+		fmt.Println("Visiting", r.URL.String())
+	})
 
 	rows := make([]T, 0, 30)
 	c.OnHTML("table.table-sortable tbody > tr", func(e *colly.HTMLElement) {
@@ -169,10 +183,24 @@ func updateStandingsGeneric[T any](db *gorm.DB, url string, year string, newRow 
 }
 
 func updateResultsGeneric[T any](db *gorm.DB, url string, eventID string, newRow func(string, string, string, string, string, string, string) T) error {
-	c := colly.NewCollector()
+	c := colly.NewCollector(
+		// Optional: make it look like Chrome
+		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+			"AppleWebKit/537.36 (KHTML, like Gecko) " +
+			"Chrome/115.0.0.0 Safari/537.36"),
+	)
 	c.Async = true
 
 	rows := make([]T, 0, 30)
+
+	c.OnRequest(func(r *colly.Request) {
+		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		r.Headers.Set("Accept-Language", "en-US,en;q=0.9")
+		r.Headers.Set("Cache-Control", "no-cache")
+		// You can spoof Referer or others if needed:
+		// r.Headers.Set("Referer", "https://www.google.com/")
+		fmt.Println("Visiting", r.URL.String())
+	})
 
 	c.OnHTML("table.table-sortable tbody#lbBody > tr", func(e *colly.HTMLElement) {
 		rank := strings.TrimSpace(e.ChildText("td:nth-child(1)"))
@@ -233,11 +261,25 @@ func updateResultsGeneric[T any](db *gorm.DB, url string, eventID string, newRow
 }
 
 func updateSkinsResults(db *gorm.DB, url string, eventID string) error {
-	c := colly.NewCollector()
+	c := colly.NewCollector(
+		// Optional: make it look like Chrome
+		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+			"AppleWebKit/537.36 (KHTML, like Gecko) " +
+			"Chrome/115.0.0.0 Safari/537.36"),
+	)
 	c.Async = true
 
 	playerRows := make([]*SkinsPlayerResult, 0, 30)
 	holeRows := make([]*SkinsHolesResult, 0, 30)
+
+	c.OnRequest(func(r *colly.Request) {
+		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		r.Headers.Set("Accept-Language", "en-US,en;q=0.9")
+		r.Headers.Set("Cache-Control", "no-cache")
+		// You can spoof Referer or others if needed:
+		// r.Headers.Set("Referer", "https://www.google.com/")
+		fmt.Println("Visiting", r.URL.String())
+	})
 
 	// Scrape player results
 	c.OnHTML("tbody#lbBody > tr", func(e *colly.HTMLElement) {
@@ -324,7 +366,12 @@ func updateSkinsResults(db *gorm.DB, url string, eventID string) error {
 }
 
 func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
-	c := colly.NewCollector()
+	c := colly.NewCollector(
+		// Optional: make it look like Chrome
+		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+			"AppleWebKit/537.36 (KHTML, like Gecko) " +
+			"Chrome/115.0.0.0 Safari/537.36"),
+	)
 	c.Async = true
 
 	var matches []*MatchPlayMatch
@@ -336,6 +383,15 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		}
 		return strings.TrimSpace(cells.Eq(idx).Text())
 	}
+
+	c.OnRequest(func(r *colly.Request) {
+		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		r.Headers.Set("Accept-Language", "en-US,en;q=0.9")
+		r.Headers.Set("Cache-Control", "no-cache")
+		// You can spoof Referer or others if needed:
+		// r.Headers.Set("Referer", "https://www.google.com/")
+		fmt.Println("Visiting", r.URL.String())
+	})
 
 	c.OnHTML("table.matchtree", func(e *colly.HTMLElement) {
 		var rows []*goquery.Selection
@@ -599,7 +655,12 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 }
 
 func ScrapeTeeTimes(startURL string) ([]TeeTime, error) {
-	c := colly.NewCollector()
+	c := colly.NewCollector(
+		// Optional: make it look like Chrome
+		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+			"AppleWebKit/537.36 (KHTML, like Gecko) " +
+			"Chrome/115.0.0.0 Safari/537.36"),
+	)
 	c.Async = true
 
 	var (
@@ -613,6 +674,15 @@ func ScrapeTeeTimes(startURL string) ([]TeeTime, error) {
 	normalizeHole := func(h string) string { /* ... same as before ... */ return h }
 	normalizeTime := func(t string) string { /* ... same as before ... */ return t }
 	normalizePlayers := func(ps []string) []string { /* ... same as before ... */ return ps }
+
+	c.OnRequest(func(r *colly.Request) {
+		r.Headers.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		r.Headers.Set("Accept-Language", "en-US,en;q=0.9")
+		r.Headers.Set("Cache-Control", "no-cache")
+		// You can spoof Referer or others if needed:
+		// r.Headers.Set("Referer", "https://www.google.com/")
+		fmt.Println("Visiting", r.URL.String())
+	})
 
 	// --- NEW: capture round per page and store in Request context
 	c.OnHTML("#rndSelect", func(e *colly.HTMLElement) {
