@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
 	"gorm.io/gorm"
+	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
@@ -651,6 +655,123 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 			return tx.Create(&matches).Error
 		})
 	}
+	return nil
+}
+
+func ScrapeAndPostToServer(db *gorm.DB, serverUrl, eventID string, s *Standings,
+	netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl string) error {
+
+	err := updateResults(db, eventID, netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl)
+	if err != nil {
+		return err
+	}
+
+	err = updateStandings(db, s)
+	if err != nil {
+		return err
+	}
+	var netResults []NetResult
+	if err := db.Where("event_id = ?", eventID).Order("rank ASC").Find(&netResults).Error; err != nil {
+		return err
+	}
+	sort.Slice(netResults, func(i, j int) bool {
+		return parseRank(netResults[i].Rank) < parseRank(netResults[j].Rank)
+	})
+
+	var grossResults []GrossResult
+	if err := db.Where("event_id = ?", eventID).Order("rank ASC").Find(&grossResults).Error; err != nil {
+		return err
+	}
+	sort.Slice(grossResults, func(i, j int) bool {
+		return parseRank(grossResults[i].Rank) < parseRank(grossResults[j].Rank)
+	})
+
+	var players []SkinsPlayerResult
+	var holes []SkinsHolesResult
+
+	if err := db.Where("event_id = ?", eventID).Order("rank ASC").Find(&players).Error; err != nil {
+		return err
+	}
+	if err := db.Where("event_id = ?", eventID).Order("hole ASC").Find(&holes).Error; err != nil {
+		return err
+	}
+	sort.Slice(players, func(i, j int) bool {
+		return parseRank(players[i].Rank) < parseRank(players[j].Rank)
+	})
+	sort.Slice(holes, func(i, j int) bool {
+		return parseHole(holes[i].Hole) < parseHole(holes[j].Hole)
+	})
+
+	skinsResults := map[string]any{
+		"players": players,
+		"holes":   holes,
+	}
+
+	var teamResults []TeamResult
+	if err := db.Where("event_id = ?", eventID).Order("rank ASC").Find(&teamResults).Error; err != nil {
+		return err
+	}
+	sort.Slice(teamResults, func(i, j int) bool {
+		return parseRank(teamResults[i].Rank) < parseRank(teamResults[j].Rank)
+	})
+
+	var wgrResults []WGRResult
+	if err := db.Where("event_id = ?", eventID).Order("rank ASC").Find(&wgrResults).Error; err != nil {
+		return err
+	}
+	sort.Slice(wgrResults, func(i, j int) bool {
+		return parseRank(wgrResults[i].Rank) < parseRank(wgrResults[j].Rank)
+	})
+
+	var season []SeasonRank
+	sub := db.Model(&SeasonRank{}).Select("MAX(year)")
+	if err := db.Where("year = (?)", sub).Find(&season).Error; err != nil {
+		return err
+	}
+	sort.Slice(season, func(i, j int) bool {
+		return parseRank(season[i].Rank) < parseRank(season[j].Rank)
+	})
+
+	var wgr []WGRRank
+	sub = db.Model(&WGRRank{}).Select("MAX(year)")
+	if err := db.Where("year = (?)", sub).Find(&wgr).Error; err != nil {
+		return err
+	}
+	sort.Slice(wgr, func(i, j int) bool {
+		return parseRank(wgr[i].Rank) < parseRank(wgr[j].Rank)
+	})
+
+	post := map[string]any{
+		"event_id":         eventID,
+		"year":             s.CalendarYear,
+		"net_results":      netResults,
+		"gross_results":    grossResults,
+		"skins_results":    skinsResults,
+		"teams_results":    teamResults,
+		"wgr_results":      wgrResults,
+		"season_standings": season,
+		"wgr_standings":    wgr,
+	}
+
+	out, _ := json.MarshalIndent(post, "", "    ")
+	fmt.Println(string(out))
+
+	// 2. Send POST request
+	resp, err := http.Post(
+		serverUrl, // replace with your URL
+		"application/json",
+		bytes.NewBuffer(out),
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	// 3. Handle response
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("Request failed: " + resp.Status)
+	}
+
 	return nil
 }
 

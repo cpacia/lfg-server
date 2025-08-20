@@ -458,6 +458,31 @@ func Test_sortTeeTimes(t *testing.T) {
 	assert.Equal(t, "1:51 PM", teeTimes[3].Time)
 }
 
+func TestScrapeAndPostToServer(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	assert.NoError(t, err)
+
+	err = applyMigrations(db)
+	assert.NoError(t, err)
+
+	serverUrl := "http://localhost:8080/api/updates"
+	eventID := "2025-fox-run-open"
+
+	standings := &Standings{
+		CalendarYear:       "2025",
+		SeasonStandingsUrl: "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/poy/lfgchampiongolferoftheyear/index.htm",
+		WgrStandingsUrl:    "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/poy/lfgwgr/index.htm",
+	}
+	netUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc258/contest/1/leaderboard.htm"
+	grossUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc258/contest/8/leaderboard.htm"
+	skinsUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc258/contest/4/leaderboard.htm"
+	teamsUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc258/contest/11/leaderboard.htm"
+	wgrUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc258/contest/13/leaderboard.htm"
+
+	err = ScrapeAndPostToServer(db, serverUrl, eventID, standings, netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl)
+	assert.NoError(t, err)
+}
+
 /*func TestPrintHtml(t *testing.T) {
 	// Create a new collector
 	c := colly.NewCollector()

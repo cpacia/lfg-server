@@ -1671,3 +1671,118 @@ func (s *Server) GetTeeTimes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(teeTimes)
 }
+
+func (s *Server) PostUpdates(w http.ResponseWriter, r *http.Request) {
+	type DataUpdate struct {
+		EventId      string        `json:"event_id"`
+		Year         string        `json:"year"`
+		NetResults   []NetResult   `json:"net_results"`
+		GrossResults []GrossResult `json:"gross_results"`
+		SkinsResults struct {
+			Players []SkinsPlayerResult `json:"players"`
+			Holes   []SkinsHolesResult  `json:"holes"`
+		} `json:"skins_results"`
+		TeamsResults    []TeamResult `json:"teams_results"`
+		WgrResults      []WGRResult  `json:"wgr_results"`
+		SeasonStandings []SeasonRank `json:"season_standings"`
+		WgrStandings    []WGRRank    `json:"wgr_standings"`
+	}
+	var input DataUpdate
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		fmt.Println("***", err)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&NetResult{}).Error; err != nil {
+			return err
+		}
+		for i := range input.NetResults {
+			input.NetResults[i].ID = 0
+		}
+
+		if err := tx.Create(input.NetResults).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&GrossResult{}).Error; err != nil {
+			return err
+		}
+		for i := range input.GrossResults {
+			input.GrossResults[i].ID = 0
+		}
+
+		if err := tx.Create(input.GrossResults).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&SkinsPlayerResult{}).Error; err != nil {
+			return err
+		}
+		for i := range input.SkinsResults.Players {
+			input.SkinsResults.Players[i].ID = 0
+		}
+
+		if err := tx.Create(input.SkinsResults.Players).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&SkinsHolesResult{}).Error; err != nil {
+			return err
+		}
+		for i := range input.SkinsResults.Holes {
+			input.SkinsResults.Holes[i].ID = 0
+		}
+		if err := tx.Create(input.SkinsResults.Holes).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&TeamResult{}).Error; err != nil {
+			return err
+		}
+		for i := range input.TeamsResults {
+			input.TeamsResults[i].ID = 0
+		}
+
+		if err := tx.Create(input.TeamsResults).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&WGRResult{}).Error; err != nil {
+			return err
+		}
+		for i := range input.WgrResults {
+			input.WgrResults[i].ID = 0
+		}
+		if err := tx.Create(input.WgrResults).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Unscoped().Where("year = ?", input.Year).Delete(&SeasonRank{}).Error; err != nil {
+			return err
+		}
+		for i := range input.SeasonStandings {
+			input.SeasonStandings[i].ID = 0
+		}
+		if err := tx.Create(input.SeasonStandings).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Unscoped().Where("year = ?", input.Year).Delete(&WGRRank{}).Error; err != nil {
+			return err
+		}
+		for i := range input.WgrStandings {
+			input.WgrStandings[i].ID = 0
+		}
+		if err := tx.Create(input.WgrStandings).Error; err != nil {
+			return err
+		}
+
+		return nil
+
+	}); err != nil {
+		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}

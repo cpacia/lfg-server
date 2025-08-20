@@ -154,6 +154,7 @@ func main() {
 
 	r.Get("/api/current-year", s.GETCurrentYear)
 	r.Get("/api/tee-times/{eventID}", s.GetTeeTimes)
+	r.Post("/api/updates", s.PostUpdates)
 
 	http.ListenAndServe(":8080", r)
 }
