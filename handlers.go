@@ -314,7 +314,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 	var out []Tournament
 	if typ == "season" {
 		var results []NetResult
-		if err := s.db.Where("player = ?", player).Find(&results).Error; err != nil {
+		if err := s.db.Where("player LIKE ?", "%"+player+"%").Find(&results).Error; err != nil {
 			http.Error(w, "Failed to load NET standings", http.StatusInternalServerError)
 			return
 		}
@@ -351,7 +351,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		var results []WGRResult
-		if err := s.db.Where("player = ?", player).Find(&results).Error; err != nil {
+		if err := s.db.Where("player LIKE ?", "%"+player+"%").Find(&results).Error; err != nil {
 			http.Error(w, "Failed to load WGR standings", http.StatusInternalServerError)
 			return
 		}

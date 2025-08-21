@@ -465,7 +465,7 @@ func TestScrapeAndPostToServer(t *testing.T) {
 	err = applyMigrations(db)
 	assert.NoError(t, err)
 
-	serverUrl := "http://localhost:8080/api/updates"
+	serverUrl := "https://lfg-server-production.up.railway.app/api/updates"
 	eventID := "2025-fox-run-open"
 
 	standings := &Standings{
