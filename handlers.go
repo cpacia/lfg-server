@@ -1737,25 +1737,29 @@ func (s *Server) PostUpdates(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&TeamResult{}).Error; err != nil {
-			return err
-		}
-		for i := range input.TeamsResults {
-			input.TeamsResults[i].ID = 0
+		if len(input.TeamsResults) > 0 {
+			if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&TeamResult{}).Error; err != nil {
+				return err
+			}
+			for i := range input.TeamsResults {
+				input.TeamsResults[i].ID = 0
+			}
+
+			if err := tx.Create(input.TeamsResults).Error; err != nil {
+				return err
+			}
 		}
 
-		if err := tx.Create(input.TeamsResults).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&WGRResult{}).Error; err != nil {
-			return err
-		}
-		for i := range input.WgrResults {
-			input.WgrResults[i].ID = 0
-		}
-		if err := tx.Create(input.WgrResults).Error; err != nil {
-			return err
+		if len(input.WgrResults) > 0 {
+			if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&WGRResult{}).Error; err != nil {
+				return err
+			}
+			for i := range input.WgrResults {
+				input.WgrResults[i].ID = 0
+			}
+			if err := tx.Create(input.WgrResults).Error; err != nil {
+				return err
+			}
 		}
 
 		if err := tx.Unscoped().Where("year = ?", input.Year).Delete(&SeasonRank{}).Error; err != nil {
