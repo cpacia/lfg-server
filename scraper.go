@@ -528,13 +528,11 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Find("td").Eq(5). // fourth <td>
 				Text()
 
-			// FIXME: figure out correct index when more data is populated
 			winner := dataRows[i+1].
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
-			// FIXME: figure out correct index when more data is populated
-			score := dataRows[i+2].
+			score := dataRows[i+3].
 				Find("td").Eq(5).  // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
@@ -558,19 +556,19 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 
 		// Semifinals
 		matchNum = 0
-		for i := 0; i+2 < len(dataRows); i += 16 {
+		for i := 9; i+2 < len(dataRows); i += 16 {
 			// FIXME: figure out correct index when more data is populated
 			player1 := dataRows[i].
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
-			// FIXME: figure out correct index when more data is populated
-			player2 := dataRows[i+4].
+			// This is correct
+			player2 := dataRows[i+1].
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
 			// FIXME: figure out correct index when more data is populated
-			winner := dataRows[i+1].
+			winner := dataRows[i+3].
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
@@ -579,7 +577,6 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Find("td").Eq(7).  // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
-			fmt.Println(i, player1, player2, winner, score)
 
 			if score == "Tied" {
 				score = ""
@@ -597,7 +594,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 			})
 			matchNum++
 		}
-		// Semifinals
+		// Finals
 		matchNum = 0
 		for i := 0; i+2 < len(dataRows); i += 32 {
 			// FIXME: figure out correct index when more data is populated

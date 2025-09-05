@@ -1,18 +1,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func Test_updateStandings(t *testing.T) {
@@ -484,51 +481,6 @@ func TestScrapeAndPostToServer(t *testing.T) {
 
 	err = ScrapeAndPostToServer(db, serverUrl, eventID, standings, netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl)
 	assert.NoError(t, err)
-}
-
-func TestServer_POSTChangePasswordHandler(t *testing.T) {
-	url := "https://lfg-server-production.up.railway.app/api/updates"
-	file := "/home/chris/Downloads/loudon.json"
-
-	// Open the file so we can stream it (better for large payloads).
-	f, err := os.Open(file)
-	if err != nil {
-		t.Error(err)
-	}
-	defer f.Close()
-
-	// Build request with context timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, f)
-	if err != nil {
-		t.Error(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "postjson/1.0 (+https://example.com)")
-
-	// Do the request.
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	defer resp.Body.Close()
-
-	// Read response (up to a reasonable size).
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20)) // 2MB
-	if err != nil {
-		t.Error(err)
-	}
-
-	// Non-2xx is considered an error but we still show the body for debugging.
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		fmt.Fprintf(os.Stderr, "server returned %s\n%s\n", resp.Status, string(body))
-		os.Exit(1)
-	}
-
-	fmt.Printf("%s\n", string(body))
 }
 
 /*func TestPrintHtml(t *testing.T) {
