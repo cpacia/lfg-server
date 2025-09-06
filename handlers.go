@@ -400,6 +400,9 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 		}
 		top := make([]idxPts, 0, len(out))
 		for i, t := range out {
+			if strings.Contains(strings.ToLower(t.Name), "playoff") {
+				continue
+			}
 			top = append(top, idxPts{idx: i, pts: parsePoints(t.Points)})
 		}
 		sort.Slice(top, func(i, j int) bool { return top[i].pts > top[j].pts })
