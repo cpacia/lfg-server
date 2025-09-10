@@ -445,12 +445,12 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		matchNum := 0
 		for i := 0; i+1 < len(dataRows); i += 2 {
 			player1 := dataRows[i].
-				Find("td").Eq(1).     // second <td>
+				Find("td").Eq(1). // second <td>
 				Find("span").First(). // first <span> inside it
 				Text()
 
 			player2 := dataRows[i+1].
-				Find("td").Eq(1).     // second <td>
+				Find("td").Eq(1). // second <td>
 				Find("span").First(). // first <span> inside it
 				Text()
 
@@ -459,7 +459,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Text()
 
 			score := dataRows[i+1].
-				Find("td").Eq(3).  // second <td>
+				Find("td").Eq(3). // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
 
@@ -496,7 +496,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Text()
 
 			score := dataRows[i+2].
-				Find("td").Eq(5).  // second <td>
+				Find("td").Eq(5). // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
 
@@ -533,7 +533,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Text()
 
 			score := dataRows[i+3].
-				Find("td").Eq(5).  // second <td>
+				Find("td").Eq(5). // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
 
@@ -574,7 +574,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 
 			// FIXME: figure out correct index when more data is populated
 			score := dataRows[i+2].
-				Find("td").Eq(7).  // second <td>
+				Find("td").Eq(7). // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
 
@@ -614,7 +614,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 
 			// FIXME: figure out correct index when more data is populated
 			score := dataRows[i+2].
-				Find("td").Eq(7).  // second <td>
+				Find("td").Eq(7). // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
 			fmt.Println(i, player1, player2, winner, score)
@@ -752,6 +752,8 @@ func ScrapeAndPostToServer(db *gorm.DB, serverUrl, eventID string, s *Standings,
 
 	out, _ := json.MarshalIndent(post, "", "    ")
 	fmt.Println(string(out))
+
+	return nil
 
 	// 2. Send POST request
 	resp, err := http.Post(

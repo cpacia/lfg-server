@@ -401,7 +401,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 		top := make([]idxPts, 0, len(out))
 		for i, t := range out {
 			// Don't include playoff events for top n calculation
-			if strings.Contains(strings.ToLower(t.Name), "playoff") {
+			if typ != "wgr" && strings.Contains(strings.ToLower(t.Name), "playoff") {
 				continue
 			}
 			top = append(top, idxPts{idx: i, pts: parsePoints(t.Points)})
@@ -416,7 +416,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 		// But do add a flag to playoff events since they are used in addition
 		// to the top n.
 		for i, t := range out {
-			if strings.Contains(strings.ToLower(t.Name), "playoff") {
+			if typ != "wgr" && strings.Contains(strings.ToLower(t.Name), "playoff") {
 				out[i].UsedInCalc = true
 			}
 		}
