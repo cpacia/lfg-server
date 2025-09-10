@@ -221,6 +221,7 @@ type Tournament struct {
 	Score      string `json:"score"`
 	Points     string `json:"points"`
 	Place      string `json:"place"`
+	IsTeam     bool   `json:"isTeam"`
 }
 
 type TeeTime struct {

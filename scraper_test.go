@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -483,45 +481,6 @@ func TestScrapeAndPostToServer(t *testing.T) {
 
 	err = ScrapeAndPostToServer(db, serverUrl, eventID, standings, netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl)
 	assert.NoError(t, err)
-}
-
-func TestServer_POSTChangePasswordHandler(t *testing.T) {
-	url := "https://lfg-server-production.up.railway.app/api/updates"
-	// Open the JSON file
-	file, err := os.Open("/home/chris/Downloads/updated_standings_with_events.json")
-	if err != nil {
-		t.Fatalf("failed to open file: %s", err)
-	}
-	defer file.Close()
-
-	// Read the file content
-	data, err := io.ReadAll(file)
-	if err != nil {
-		t.Fatalf("failed to read file: %s", err)
-	}
-
-	// Create a new POST request
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	if err != nil {
-		t.Fatalf("failed to create request: %s", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("failed to send request: %s", err)
-	}
-	defer resp.Body.Close()
-
-	// Check for a successful response
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	fmt.Println("Successfully posted JSON to", url)
 }
 
 /*func TestPrintHtml(t *testing.T) {

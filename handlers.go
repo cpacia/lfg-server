@@ -346,6 +346,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 					Score:      r.Total,
 					Points:     r.Points,
 					Place:      r.Rank,
+					IsTeam:     strings.Contains(r.Player, "/"),
 				})
 			}
 		}
@@ -383,6 +384,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 					Score:      r.Total,
 					Points:     r.Points,
 					Place:      r.Rank,
+					IsTeam:     strings.Contains(r.Player, "/"),
 				})
 			}
 		}
@@ -400,7 +402,7 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 		}
 		top := make([]idxPts, 0, len(out))
 		for i, t := range out {
-			if strings.Contains(t.Player, "/") {
+			if t.IsTeam {
 				points, err := strconv.Atoi(t.Points)
 				if err == nil {
 					out[i].Points = strconv.Itoa(points / 2)
