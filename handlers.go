@@ -400,6 +400,13 @@ func (s *Server) GETStandingsUserData(w http.ResponseWriter, r *http.Request) {
 		}
 		top := make([]idxPts, 0, len(out))
 		for i, t := range out {
+			// FIXME: handle scramble better
+			if t.Name == "Loudon 2-man Scramble" {
+				points, err := strconv.Atoi(t.Points)
+				if err == nil {
+					out[i].Points = strconv.Itoa(points / 2)
+				}
+			}
 			// Don't include playoff events for top n calculation
 			if typ != "wgr" && strings.Contains(strings.ToLower(t.Name), "playoff") {
 				continue
