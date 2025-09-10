@@ -471,11 +471,11 @@ func TestScrapeAndPostToServer(t *testing.T) {
 	standings := &Standings{
 		CalendarYear:       "2025",
 		SeasonStandingsUrl: "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/poy/lfgchampiongolferoftheyear/index.htm",
-		WgrStandingsUrl:    "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/poy/lfgwgr/index.htm",
+		WgrStandingsUrl:    "",
 	}
-	netUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc2513/contest/1/leaderboard.htm"
-	grossUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc2513/contest/8/leaderboard.htm"
-	skinsUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc2513/contest/4/leaderboard.htm"
+	netUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc2514/contest/1/leaderboard.htm"
+	grossUrl := ""
+	skinsUrl := ""
 	teamsUrl := ""
 	wgrUrl := ""
 

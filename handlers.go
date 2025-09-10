@@ -1706,46 +1706,52 @@ func (s *Server) PostUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&NetResult{}).Error; err != nil {
-			return err
-		}
-		for i := range input.NetResults {
-			input.NetResults[i].ID = 0
+		if len(input.NetResults) > 0 {
+			if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&NetResult{}).Error; err != nil {
+				return err
+			}
+			for i := range input.NetResults {
+				input.NetResults[i].ID = 0
+			}
+
+			if err := tx.Create(input.NetResults).Error; err != nil {
+				return err
+			}
 		}
 
-		if err := tx.Create(input.NetResults).Error; err != nil {
-			return err
+		if len(input.GrossResults) > 0 {
+			if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&GrossResult{}).Error; err != nil {
+				return err
+			}
+			for i := range input.GrossResults {
+				input.GrossResults[i].ID = 0
+			}
+
+			if err := tx.Create(input.GrossResults).Error; err != nil {
+				return err
+			}
 		}
 
-		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&GrossResult{}).Error; err != nil {
-			return err
-		}
-		for i := range input.GrossResults {
-			input.GrossResults[i].ID = 0
-		}
+		if len(input.SkinsResults.Holes) > 0 {
+			if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&SkinsPlayerResult{}).Error; err != nil {
+				return err
+			}
+			for i := range input.SkinsResults.Players {
+				input.SkinsResults.Players[i].ID = 0
+			}
+			if err := tx.Create(input.SkinsResults.Players).Error; err != nil {
+				return err
+			}
 
-		if err := tx.Create(input.GrossResults).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&SkinsPlayerResult{}).Error; err != nil {
-			return err
-		}
-		for i := range input.SkinsResults.Players {
-			input.SkinsResults.Players[i].ID = 0
-		}
-
-		if err := tx.Create(input.SkinsResults.Players).Error; err != nil {
-			return err
-		}
-		if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&SkinsHolesResult{}).Error; err != nil {
-			return err
-		}
-		for i := range input.SkinsResults.Holes {
-			input.SkinsResults.Holes[i].ID = 0
-		}
-		if err := tx.Create(input.SkinsResults.Holes).Error; err != nil {
-			return err
+			if err := tx.Unscoped().Where("event_id = ?", input.EventId).Delete(&SkinsHolesResult{}).Error; err != nil {
+				return err
+			}
+			for i := range input.SkinsResults.Holes {
+				input.SkinsResults.Holes[i].ID = 0
+			}
+			if err := tx.Create(input.SkinsResults.Holes).Error; err != nil {
+				return err
+			}
 		}
 
 		if len(input.TeamsResults) > 0 {
@@ -1773,24 +1779,28 @@ func (s *Server) PostUpdates(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := tx.Unscoped().Where("year = ?", input.Year).Delete(&SeasonRank{}).Error; err != nil {
-			return err
-		}
-		for i := range input.SeasonStandings {
-			input.SeasonStandings[i].ID = 0
-		}
-		if err := tx.Create(input.SeasonStandings).Error; err != nil {
-			return err
+		if len(input.SeasonStandings) > 0 {
+			if err := tx.Unscoped().Where("year = ?", input.Year).Delete(&SeasonRank{}).Error; err != nil {
+				return err
+			}
+			for i := range input.SeasonStandings {
+				input.SeasonStandings[i].ID = 0
+			}
+			if err := tx.Create(input.SeasonStandings).Error; err != nil {
+				return err
+			}
 		}
 
-		if err := tx.Unscoped().Where("year = ?", input.Year).Delete(&WGRRank{}).Error; err != nil {
-			return err
-		}
-		for i := range input.WgrStandings {
-			input.WgrStandings[i].ID = 0
-		}
-		if err := tx.Create(input.WgrStandings).Error; err != nil {
-			return err
+		if len(input.WgrStandings) > 0 {
+			if err := tx.Unscoped().Where("year = ?", input.Year).Delete(&WGRRank{}).Error; err != nil {
+				return err
+			}
+			for i := range input.WgrStandings {
+				input.WgrStandings[i].ID = 0
+			}
+			if err := tx.Create(input.WgrStandings).Error; err != nil {
+				return err
+			}
 		}
 
 		return nil
