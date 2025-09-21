@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -466,21 +468,59 @@ func TestScrapeAndPostToServer(t *testing.T) {
 	assert.NoError(t, err)
 
 	serverUrl := "https://lfg-server-production.up.railway.app/api/updates"
-	eventID := "2025-playoff-1"
+	eventID := "2025-playoff-2"
 
 	standings := &Standings{
 		CalendarYear:       "2025",
 		SeasonStandingsUrl: "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/poy/lfgchampiongolferoftheyear/index.htm",
-		WgrStandingsUrl:    "",
+		WgrStandingsUrl:    "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/poy/lfgwgr/index.htm",
 	}
-	netUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc2514/contest/1/leaderboard.htm"
+	netUrl := ""
 	grossUrl := ""
 	skinsUrl := ""
 	teamsUrl := ""
-	wgrUrl := ""
+	wgrUrl := "https://nhgaclub.bluegolf.com/bluegolfw/nhgaclublivefreegc25/event/nhgaclublivefreegc2515/contest/11/leaderboard.htm"
 
 	err = ScrapeAndPostToServer(db, serverUrl, eventID, standings, netUrl, grossUrl, skinsUrl, teamsUrl, wgrUrl)
 	assert.NoError(t, err)
+}
+func TestServer_POSTDataUpdate(t *testing.T) {
+	// Open the JSON file
+	url := "https://lfg-server-production.up.railway.app/api/updates"
+	file, err := os.Open("/home/chris/Downloads/season_standings_after_playoff2_updated.json")
+	if err != nil {
+		t.Errorf("failed to open file: %s", err)
+	}
+	defer file.Close()
+
+	// Read the file content
+	data, err := io.ReadAll(file)
+	if err != nil {
+		t.Errorf("failed to read file: %s", err)
+	}
+
+	// Create a new POST request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		t.Errorf("failed to create request: %s", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request: %s", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for a successful response
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	fmt.Println("Successfully posted JSON to", url)
 }
 
 /*func TestPrintHtml(t *testing.T) {

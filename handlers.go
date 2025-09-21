@@ -1562,8 +1562,10 @@ func (s *Server) GETDataDirectory(w http.ResponseWriter, r *http.Request) {
 
 	// Name of the downloaded .zip file
 	zipName := "lfg-server-data.zip"
+	today := time.Now().Format("2006-01-02") // YYYY-MM-DD format
+	fileName := today + "-" + zipName
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+zipName+`"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+fileName+`"`)
 
 	// Create a zip.Writer that writes directly to the http.ResponseWriter
 	zipWriter := zip.NewWriter(w)

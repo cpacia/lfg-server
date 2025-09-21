@@ -752,6 +752,7 @@ func ScrapeAndPostToServer(db *gorm.DB, serverUrl, eventID string, s *Standings,
 
 	out, _ := json.MarshalIndent(post, "", "    ")
 	fmt.Println(string(out))
+	return nil
 
 	// 2. Send POST request
 	resp, err := http.Post(
