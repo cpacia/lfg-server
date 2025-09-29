@@ -676,11 +676,11 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Compare fields
-	triggerScrape := (updated.NetLeaderboardUrl != existing.NetLeaderboardUrl ||
+	triggerScrape := updated.NetLeaderboardUrl != existing.NetLeaderboardUrl ||
 		updated.GrossLeaderboardUrl != existing.GrossLeaderboardUrl ||
 		updated.SkinsLeaderboardUrl != existing.SkinsLeaderboardUrl ||
 		updated.TeamsLeaderboardUrl != existing.TeamsLeaderboardUrl ||
-		updated.WgrLeaderboardUrl != existing.WgrLeaderboardUrl) && shouldUpdate
+		updated.WgrLeaderboardUrl != existing.WgrLeaderboardUrl
 
 	// Save update
 	if err := s.db.Save(&updated).Error; err != nil {
@@ -710,15 +710,17 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var latest Standings
-		err = s.db.Order("calendar_year DESC").First(&latest).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, "Error loading standings from db", http.StatusInternalServerError)
-			return
-		} else if err == nil {
-			if err := updateStandings(s.db, &latest); err != nil {
-				http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
+		if shouldUpdate {
+			var latest Standings
+			err = s.db.Order("calendar_year DESC").First(&latest).Error
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				http.Error(w, "Error loading standings from db", http.StatusInternalServerError)
 				return
+			} else if err == nil {
+				if err := updateStandings(s.db, &latest); err != nil {
+					http.Error(w, fmt.Sprintf("Error downloading new standings: %s", err.Error()), http.StatusBadRequest)
+					return
+				}
 			}
 		}
 	}
