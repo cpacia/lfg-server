@@ -642,6 +642,11 @@ func (s *Server) POSTEvent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "eventID")
+	updateFlag := r.URL.Query().Get("updateStandings")
+	shouldUpdate := false
+	if updateFlag != "" {
+		shouldUpdate, _ = strconv.ParseBool(updateFlag)
+	}
 
 	var existing Event
 	if err := s.db.First(&existing, "event_id = ?", eventID).Error; err != nil {
@@ -671,11 +676,11 @@ func (s *Server) PUTEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Compare fields
-	triggerScrape := updated.NetLeaderboardUrl != existing.NetLeaderboardUrl ||
+	triggerScrape := (updated.NetLeaderboardUrl != existing.NetLeaderboardUrl ||
 		updated.GrossLeaderboardUrl != existing.GrossLeaderboardUrl ||
 		updated.SkinsLeaderboardUrl != existing.SkinsLeaderboardUrl ||
 		updated.TeamsLeaderboardUrl != existing.TeamsLeaderboardUrl ||
-		updated.WgrLeaderboardUrl != existing.WgrLeaderboardUrl
+		updated.WgrLeaderboardUrl != existing.WgrLeaderboardUrl) && shouldUpdate
 
 	// Save update
 	if err := s.db.Save(&updated).Error; err != nil {
