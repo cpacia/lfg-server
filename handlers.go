@@ -1064,6 +1064,174 @@ func (s *Server) GETWgrResults(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
+type colonyCupPair struct {
+	TeamOne string `json:"team1"`
+	TeamTwo string `json:"team2"`
+	Winner  string `json:"winner"`
+	Score   string `json:"score"`
+}
+
+func (s *Server) GETColonyCupResults(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "eventID")
+	if eventID == "" {
+		http.Error(w, "Missing event ID", http.StatusBadRequest)
+		return
+	}
+
+	var rows []ColonyCupResult
+	if err := s.db.Where("event_id = ?", eventID).Find(&rows).Error; err != nil {
+		http.Error(w, "Error fetching Colony Cup results", http.StatusInternalServerError)
+		return
+	}
+
+	// Build response:
+	// - exactly one "Colony Cup" object (overall)
+	// - arrays for all other event names (Best Ball, Scramble, etc.)
+	var overall *colonyCupPair
+	grouped := make(map[string][]colonyCupPair)
+
+	for _, r := range rows {
+		item := colonyCupPair{
+			TeamOne: r.TeamOne,
+			TeamTwo: r.TeamTwo,
+			Winner:  r.Winner,
+			Score:   r.Score,
+		}
+
+		if strings.EqualFold(r.EventName, "Colony Cup") {
+			// keep the latest seen; if you prefer "first wins", gate this with `if overall == nil`.
+			cp := item
+			overall = &cp
+			continue
+		}
+
+		grouped[r.EventName] = append(grouped[r.EventName], item)
+	}
+
+	// Assemble final JSON object
+	out := make(map[string]interface{})
+
+	// Ensure "Colony Cup" key is present even if missing in DB
+	if overall != nil {
+		out["Colony Cup"] = *overall
+	} else {
+		out["Colony Cup"] = colonyCupPair{}
+	}
+
+	for name, list := range grouped {
+		out[name] = list
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+func (s *Server) POSTColonyCupResults(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Unable to read request body", http.StatusBadRequest)
+		return
+	}
+
+	// Use a raw map so we can accept arbitrary event-name keys.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Pull eventID
+	var eventID string
+	if v, ok := raw["eventID"]; ok {
+		if err := json.Unmarshal(v, &eventID); err != nil || strings.TrimSpace(eventID) == "" {
+			http.Error(w, "Invalid or empty eventID", http.StatusBadRequest)
+			return
+		}
+	} else {
+		http.Error(w, "Missing eventID", http.StatusBadRequest)
+		return
+	}
+
+	// Build new rows from payload
+	var newRows []ColonyCupResult
+	parseErr := func() error {
+		for key, val := range raw {
+			if key == "eventID" {
+				continue
+			}
+
+			if strings.EqualFold(key, "Colony Cup") {
+				// Single overall object
+				var obj colonyCupPair
+				if err := json.Unmarshal(val, &obj); err != nil {
+					return errors.New(`"Colony Cup" must be an object`)
+				}
+				newRows = append(newRows, ColonyCupResult{
+					EventID:   eventID,
+					EventName: "Colony Cup", // canonicalize casing
+					TeamOne:   obj.TeamOne,
+					TeamTwo:   obj.TeamTwo,
+					Winner:    obj.Winner,
+					Score:     obj.Score,
+				})
+				continue
+			}
+
+			// All other keys must be arrays of pairs
+			var arr []colonyCupPair
+			if err := json.Unmarshal(val, &arr); err != nil {
+				return errors.New(`non-"Colony Cup" keys must be arrays of matches`)
+			}
+			for _, it := range arr {
+				newRows = append(newRows, ColonyCupResult{
+					EventID:   eventID,
+					EventName: key, // keep provided label, e.g., "Best Ball"
+					TeamOne:   it.TeamOne,
+					TeamTwo:   it.TeamTwo,
+					Winner:    it.Winner,
+					Score:     it.Score,
+				})
+			}
+		}
+		return nil
+	}()
+	if parseErr != nil {
+		http.Error(w, parseErr.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Optional: require at least one row
+	if len(newRows) == 0 {
+		http.Error(w, "No results provided", http.StatusBadRequest)
+		return
+	}
+
+	// Write in a transaction: delete old, insert new
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("event_id = ?", eventID).Delete(&ColonyCupResult{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&newRows).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		http.Error(w, "Failed to save Colony Cup results", http.StatusInternalServerError)
+		return
+	}
+
+	// Respond
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"eventID": eventID,
+		"saved":   len(newRows),
+	})
+}
+
 func (s *Server) GETCurrentYear(w http.ResponseWriter, r *http.Request) {
 	var latest Event
 	err := s.db.Order("date DESC").Limit(1).First(&latest).Error

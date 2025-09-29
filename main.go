@@ -129,6 +129,8 @@ func main() {
 	r.Get("/api/results/skins/{eventID}", s.GETSkinsResults)
 	r.Get("/api/results/teams/{eventID}", s.GETTeamResults)
 	r.Get("/api/results/wgr/{eventID}", s.GETWgrResults)
+	r.Get("/api/results/colony-cup/{eventID}", s.GETColonyCupResults)
+	r.Post("/api/results/colony-cup", s.POSTColonyCupResults)
 
 	r.Get("/api/disabled-golfers", s.GETDisabledGolfer)
 	r.Post("/api/disabled-golfers/{name}", authMiddleware(s.POSTDisabledGolfer))
@@ -237,7 +239,8 @@ func applyMigrations(db *gorm.DB) error {
 		&SkinsPlayerResult{},
 		&SkinsHolesResult{},
 		&TeamResult{},
-		&WGRResult{})
+		&WGRResult{},
+		&ColonyCupResult{})
 }
 
 // Validate the JWT token. It can either been in a cookie or a header.

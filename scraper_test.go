@@ -486,8 +486,8 @@ func TestScrapeAndPostToServer(t *testing.T) {
 }
 func TestServer_POSTDataUpdate(t *testing.T) {
 	// Open the JSON file
-	url := "https://lfg-server-production.up.railway.app/api/updates"
-	file, err := os.Open("/home/chris/Downloads/season_standings_after_playoff2_updated.json")
+	url := "http://localhost:5173/api/results/colony-cup"
+	file, err := os.Open("/home/chris/Downloads/colonycup.json")
 	if err != nil {
 		t.Errorf("failed to open file: %s", err)
 	}

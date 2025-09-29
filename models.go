@@ -145,6 +145,16 @@ type WGRResult struct {
 	ScorecardUrl string `json:"scorecardUrl"`
 }
 
+type ColonyCupResult struct {
+	gorm.Model
+	EventID   string `json:"eventID" gorm:"index"`
+	EventName string `json:"eventName" gorm:"index"`
+	TeamOne   string `json:"team1"`
+	TeamTwo   string `json:"team2"`
+	Winner    string `json:"winner"`
+	Score     string `json:"score"`
+}
+
 type Standings struct {
 	gorm.Model
 	CalendarYear       string `json:"calendarYear" gorm:"uniqueIndex"`
