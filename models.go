@@ -201,6 +201,13 @@ type ColonyCupInfo struct {
 	WinningTeam bool           `json:"winningTeam"`
 }
 
+type PastChampion struct {
+	gorm.Model
+	Year      string `json:"year" gorm:"uniqueIndex"`
+	Player    string `json:"player"`
+	Thumbnail string `json:"thumbnail"`
+}
+
 type SeasonRank struct {
 	gorm.Model
 	Year   string `json:"year"`

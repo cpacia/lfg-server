@@ -158,6 +158,16 @@ func main() {
 	r.Get("/api/tee-times/{eventID}", s.GetTeeTimes)
 	r.Post("/api/updates", s.PostUpdates)
 
+	r.Route("/api/champions", func(r chi.Router) {
+		r.Get("/", s.GETChampions)
+		r.Post("/", s.POSTChampion)
+		r.Route("/{year}", func(r chi.Router) {
+			r.Get("/image", s.GETChampionImage)
+			r.Put("/", s.PUTChampion)
+			r.Delete("/", s.DELETEChampion)
+		})
+	})
+
 	http.ListenAndServe(":8080", r)
 }
 
@@ -240,7 +250,8 @@ func applyMigrations(db *gorm.DB) error {
 		&SkinsHolesResult{},
 		&TeamResult{},
 		&WGRResult{},
-		&ColonyCupResult{})
+		&ColonyCupResult{},
+		&PastChampion{})
 }
 
 // Validate the JWT token. It can either been in a cookie or a header.

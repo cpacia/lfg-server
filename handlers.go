@@ -1996,3 +1996,186 @@ func (s *Server) PostUpdates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// GET /api/champions
+func (s *Server) GETChampions(w http.ResponseWriter, r *http.Request) {
+	var champs []PastChampion
+	if err := s.db.Order("CAST(year AS INTEGER) DESC").Find(&champs).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Always return an array, even if empty
+	w.Header().Set("Content-Type", "application/json")
+	if champs == nil {
+		champs = []PastChampion{}
+	}
+	_ = json.NewEncoder(w).Encode(champs)
+}
+
+// POST /api/champions
+// Body: multipart/form-data
+//   - "champion": JSON string like {"year":"2025","player":"Jane Doe"}
+//   - "image": optional file
+func (s *Server) POSTChampion(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(25 << 20); err != nil { // 25MB limit
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	var payload PastChampion
+	if err := json.Unmarshal([]byte(r.FormValue("champion")), &payload); err != nil {
+		http.Error(w, "Invalid champion JSON", http.StatusBadRequest)
+		return
+	}
+	payload.Year = strings.TrimSpace(payload.Year)
+	payload.Player = strings.TrimSpace(payload.Player)
+	if payload.Year == "" || payload.Player == "" {
+		http.Error(w, "Year and Player are required", http.StatusBadRequest)
+		return
+	}
+
+	// Handle optional image
+	if file, hdr, err := r.FormFile("image"); err == nil {
+		defer file.Close()
+		filename, saveErr := saveChampionImage(file, hdr, payload.Year, s.imageDir)
+		if saveErr != nil {
+			http.Error(w, saveErr.Error(), http.StatusBadRequest)
+			return
+		}
+		payload.Thumbnail = filename
+	}
+
+	if err := s.db.Create(&payload).Error; err != nil {
+		if isUniqueConstraintError(err) {
+			http.Error(w, "Champion for that year already exists", http.StatusConflict)
+			return
+		}
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// PUT /api/champions/{year}
+// Allows changing the year (we look up by path {year} as the original key).
+// Body: multipart/form-data with same fields as POST.
+func (s *Server) PUTChampion(w http.ResponseWriter, r *http.Request) {
+	origYear := chi.URLParam(r, "year")
+	if strings.TrimSpace(origYear) == "" {
+		http.Error(w, "Missing year", http.StatusBadRequest)
+		return
+	}
+
+	var existing PastChampion
+	if err := s.db.Where("year = ?", origYear).First(&existing).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Champion not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := r.ParseMultipartForm(25 << 20); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	var in PastChampion
+	if err := json.Unmarshal([]byte(r.FormValue("champion")), &in); err != nil {
+		http.Error(w, "Invalid champion JSON", http.StatusBadRequest)
+		return
+	}
+	in.Year = strings.TrimSpace(in.Year)
+	in.Player = strings.TrimSpace(in.Player)
+	if in.Year == "" || in.Player == "" {
+		http.Error(w, "Year and Player are required", http.StatusBadRequest)
+		return
+	}
+
+	// If a new image is provided, save & (optionally) remove old file
+	if file, hdr, err := r.FormFile("image"); err == nil {
+		defer file.Close()
+		filename, saveErr := saveChampionImage(file, hdr, in.Year, s.imageDir)
+		if saveErr != nil {
+			http.Error(w, saveErr.Error(), http.StatusBadRequest)
+			return
+		}
+		// delete previous file if different
+		if existing.Thumbnail != "" && existing.Thumbnail != filename {
+			_ = os.Remove(filepath.Join(s.imageDir, existing.Thumbnail))
+		}
+		existing.Thumbnail = filename
+	}
+
+	existing.Year = in.Year
+	existing.Player = in.Player
+
+	if err := s.db.Save(&existing).Error; err != nil {
+		if isUniqueConstraintError(err) {
+			http.Error(w, "Champion for that (new) year already exists", http.StatusConflict)
+			return
+		}
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(existing)
+}
+
+// DELETE /api/champions/{year}
+func (s *Server) DELETEChampion(w http.ResponseWriter, r *http.Request) {
+	year := chi.URLParam(r, "year")
+	if strings.TrimSpace(year) == "" {
+		http.Error(w, "Missing year", http.StatusBadRequest)
+		return
+	}
+
+	var champ PastChampion
+	if err := s.db.Where("year = ?", year).First(&champ).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Champion not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.db.Delete(&champ).Error; err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Best-effort image cleanup
+	if champ.Thumbnail != "" {
+		_ = os.Remove(filepath.Join(s.imageDir, champ.Thumbnail))
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// GET /api/champions/{year}/image
+func (s *Server) GETChampionImage(w http.ResponseWriter, r *http.Request) {
+	year := chi.URLParam(r, "year")
+	if strings.TrimSpace(year) == "" {
+		http.Error(w, "Missing year", http.StatusBadRequest)
+		return
+	}
+
+	var champ PastChampion
+	if err := s.db.Select("thumbnail").Where("year = ?", year).First(&champ).Error; err != nil {
+		http.Error(w, "Image not found", http.StatusNotFound)
+		return
+	}
+	if champ.Thumbnail == "" {
+		http.Error(w, "No image", http.StatusNotFound)
+		return
+	}
+
+	path := filepath.Join(s.imageDir, champ.Thumbnail)
+	http.ServeFile(w, r, path)
+}
