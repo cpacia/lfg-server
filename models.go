@@ -147,12 +147,13 @@ type WGRResult struct {
 
 type ColonyCupResult struct {
 	gorm.Model
-	EventID   string `json:"eventID" gorm:"index"`
-	EventName string `json:"eventName" gorm:"index"`
-	TeamOne   string `json:"team1"`
-	TeamTwo   string `json:"team2"`
-	Winner    string `json:"winner"`
-	Score     string `json:"score"`
+	EventID    string `json:"eventID" gorm:"index"`
+	EventName  string `json:"eventName" gorm:"index"`
+	MatchIndex int    `gorm:"index"`
+	TeamOne    string `json:"team1"`
+	TeamTwo    string `json:"team2"`
+	Winner     string `json:"winner"`
+	Score      string `json:"score"`
 }
 
 type Standings struct {

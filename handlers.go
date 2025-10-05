@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/iancoleman/orderedmap"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"io"
@@ -1079,7 +1080,7 @@ func (s *Server) GETColonyCupResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rows []ColonyCupResult
-	if err := s.db.Where("event_id = ?", eventID).Find(&rows).Error; err != nil {
+	if err := s.db.Where("event_id = ?", eventID).Order("match_index ASC").Find(&rows).Error; err != nil {
 		http.Error(w, "Error fetching Colony Cup results", http.StatusInternalServerError)
 		return
 	}
@@ -1089,6 +1090,7 @@ func (s *Server) GETColonyCupResults(w http.ResponseWriter, r *http.Request) {
 	// - arrays for all other event names (Best Ball, Scramble, etc.)
 	var overall *colonyCupPair
 	grouped := make(map[string][]colonyCupPair)
+	matchIndices := make(map[int]string)
 
 	for _, r := range rows {
 		item := colonyCupPair{
@@ -1106,20 +1108,22 @@ func (s *Server) GETColonyCupResults(w http.ResponseWriter, r *http.Request) {
 		}
 
 		grouped[r.EventName] = append(grouped[r.EventName], item)
+		matchIndices[r.MatchIndex] = r.EventName
 	}
 
 	// Assemble final JSON object
-	out := make(map[string]interface{})
+	out := orderedmap.New()
 
 	// Ensure "Colony Cup" key is present even if missing in DB
 	if overall != nil {
-		out["Colony Cup"] = *overall
+		out.Set("Colony Cup", *overall)
 	} else {
-		out["Colony Cup"] = colonyCupPair{}
+		out.Set("Colony Cup", colonyCupPair{})
 	}
 
-	for name, list := range grouped {
-		out[name] = list
+	for i := 1; i < len(grouped)+1; i++ {
+		name := matchIndices[i]
+		out.Set(name, grouped[name])
 	}
 
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -1158,6 +1162,7 @@ func (s *Server) POSTColonyCupResults(w http.ResponseWriter, r *http.Request) {
 	// Build new rows from payload
 	var newRows []ColonyCupResult
 	parseErr := func() error {
+		var i int
 		for key, val := range raw {
 			if key == "eventID" {
 				continue
@@ -1170,15 +1175,17 @@ func (s *Server) POSTColonyCupResults(w http.ResponseWriter, r *http.Request) {
 					return errors.New(`"Colony Cup" must be an object`)
 				}
 				newRows = append(newRows, ColonyCupResult{
-					EventID:   eventID,
-					EventName: "Colony Cup", // canonicalize casing
-					TeamOne:   obj.TeamOne,
-					TeamTwo:   obj.TeamTwo,
-					Winner:    obj.Winner,
-					Score:     obj.Score,
+					EventID:    eventID,
+					EventName:  "Colony Cup", // canonicalize casing
+					MatchIndex: 0,
+					TeamOne:    obj.TeamOne,
+					TeamTwo:    obj.TeamTwo,
+					Winner:     obj.Winner,
+					Score:      obj.Score,
 				})
 				continue
 			}
+			i++
 
 			// All other keys must be arrays of pairs
 			var arr []colonyCupPair
@@ -1187,12 +1194,13 @@ func (s *Server) POSTColonyCupResults(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, it := range arr {
 				newRows = append(newRows, ColonyCupResult{
-					EventID:   eventID,
-					EventName: key, // keep provided label, e.g., "Best Ball"
-					TeamOne:   it.TeamOne,
-					TeamTwo:   it.TeamTwo,
-					Winner:    it.Winner,
-					Score:     it.Score,
+					EventID:    eventID,
+					EventName:  key, // keep provided label, e.g., "Best Ball"
+					MatchIndex: i,
+					TeamOne:    it.TeamOne,
+					TeamTwo:    it.TeamTwo,
+					Winner:     it.Winner,
+					Score:      it.Score,
 				})
 			}
 		}
