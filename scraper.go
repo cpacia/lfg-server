@@ -561,19 +561,16 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
-			// This is correct
 			player2 := dataRows[i+1].
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
-			// FIXME: figure out correct index when more data is populated
-			winner := dataRows[i+3].
+			winner := dataRows[i-5].
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
-			// FIXME: figure out correct index when more data is populated
-			score := dataRows[i+2].
-				Find("td").Eq(7).  // second <td>
+			score := dataRows[i-1].
+				Find("td").Eq(5).  // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
 
@@ -601,8 +598,8 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
-			// FIXME: figure out correct index when more data is populated
-			player2 := dataRows[i+4].
+			// This is correct
+			player2 := dataRows[i+20].
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
@@ -616,7 +613,6 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 				Find("td").Eq(7).  // second <td>
 				Find("a").First(). // first <span> inside it
 				Text()
-			fmt.Println(i, player1, player2, winner, score)
 
 			if score == "Tied" {
 				score = ""
