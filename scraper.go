@@ -593,8 +593,7 @@ func updateMatchPlayResults(db *gorm.DB, year string, url string) error {
 		// Finals
 		matchNum = 0
 		for i := 0; i+2 < len(dataRows); i += 32 {
-			// FIXME: figure out correct index when more data is populated
-			player1 := dataRows[i].
+			player1 := dataRows[i+4].
 				Find("td").Eq(7). // fourth <td>
 				Text()
 
